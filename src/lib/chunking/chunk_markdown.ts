@@ -1,6 +1,6 @@
 "use server";
 
-import { RecursiveChunker } from "npm:@chonkiejs/core";
+import { RecursiveChunker } from "@chonkiejs/core";
 
 export interface Chunk {
   text: string;
@@ -261,6 +261,12 @@ function chunkTableByRows(table: SourceRange, chunkSize: number): Chunk[] {
   return chunks;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -298,10 +304,14 @@ export async function chunk_markdown(
 
   for (const section of textSections) {
     const chunks = await textChunker.chunk(section.text);
-    for (const c of chunks as Array<Record<string, unknown>>) {
-      const relStart = asNumber(c.startIndex ?? c.start_index, 0);
-      const relEnd = asNumber(c.endIndex ?? c.end_index, section.text.length);
-      const tokenCount = asNumber(c.tokenCount ?? c.token_count, 0);
+    for (const c of chunks as unknown[]) {
+      const row = asRecord(c);
+      const relStart = asNumber(row.startIndex ?? row.start_index, 0);
+      const relEnd = asNumber(
+        row.endIndex ?? row.end_index,
+        section.text.length,
+      );
+      const tokenCount = asNumber(row.tokenCount ?? row.token_count, 0);
       const absStart = section.start + relStart;
       const absEnd = section.start + relEnd;
       result.push({

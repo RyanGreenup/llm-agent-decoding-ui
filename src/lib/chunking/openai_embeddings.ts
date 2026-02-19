@@ -1,6 +1,7 @@
 "use server";
 
 import { Providers } from "../openai_provider";
+import { getOpenAIApiKey } from "../openai/server";
 
 interface EmbeddingResponse {
   data: Array<{
@@ -14,9 +15,12 @@ async function requestEmbeddings(
   body: Record<string, unknown>,
 ): Promise<EmbeddingResponse> {
   const provider = Providers.get(providerName);
+  const authorization = providerName === "openai"
+    ? { Authorization: `Bearer ${await getOpenAIApiKey()}` }
+    : Providers.authHeaders(providerName);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...Providers.authHeaders(providerName),
+    ...authorization,
   };
 
   const url = `${provider.baseUrl}${path}`;

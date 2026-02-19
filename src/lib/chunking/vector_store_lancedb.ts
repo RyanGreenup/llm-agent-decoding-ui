@@ -122,10 +122,10 @@ export class VectorStore {
     const table = await this.#tablePromise;
     if (table === null) return [];
 
-    const results = await table.search(query_embedding).distanceType("cosine")
+    const results = await table.vectorSearch(query_embedding).distanceType("cosine")
       .limit(top_k).toArray();
 
-    return results.map((r) => {
+    return results.map((r: unknown) => {
       const row = asRecord(r);
       return {
         text: typeof row.text === "string" ? row.text : "",
@@ -145,7 +145,7 @@ export class VectorStore {
     const table = await this.#tablePromise;
     if (table === null) return [];
 
-    let query = table.search(query_embedding).distanceType("cosine");
+    let query = table.vectorSearch(query_embedding).distanceType("cosine");
     if (query_text && query_text.trim().length > 0) {
       await this.#ensureFtsIndex(table);
       try {
@@ -157,7 +157,7 @@ export class VectorStore {
     }
 
     const results = await query.limit(top_k).toArray();
-    return results.map((r) => asRecord(r));
+    return results.map((r: unknown) => asRecord(r));
   }
 
   get is_empty(): Promise<boolean> {

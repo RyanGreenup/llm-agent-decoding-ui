@@ -3,16 +3,19 @@ import { createAsync, useSubmission, type RouteDefinition } from "@solidjs/route
 import { clientOnly } from "@solidjs/start";
 import Card from "~/components/Card";
 import { getConvertedDocument, reconvertDocument } from "~/lib/dataCleaning/queries";
+import { createProtectedRoute, getUser } from "~/lib/auth";
 
 const MarkdownPreview = clientOnly(() => import("~/components/MarkdownPreview"));
 
 export const route = {
   preload: () => {
+    getUser();
     getConvertedDocument();
   },
 } satisfies RouteDefinition;
 
 export default function Document() {
+  createProtectedRoute();
   const doc = createAsync(() => getConvertedDocument());
   const submission = useSubmission(reconvertDocument);
 

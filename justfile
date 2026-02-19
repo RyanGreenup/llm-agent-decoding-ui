@@ -1,13 +1,13 @@
 set dotenv-load
 
 init:
-    bun install
+    npm install
 
 dev: init
-    bun run dev --host
+    npx vinxi dev --host
 
 build:
-    docker compose build --no-cache
+    docker compose build
 
 down:
     docker compose down
@@ -16,7 +16,7 @@ up-only:
     docker compose up -d
 
 check: init
-    bun run typecheck
+    npx tsc --noEmit
 
 up: check build down up-only
 

@@ -5,14 +5,17 @@ import type { Message } from "~/lib/types";
 import ChatInput from "~/components/ChatInput";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { getModels } from "~/lib/models";
+import { createProtectedRoute, getUser } from "~/lib/auth";
 
 export const route = {
   preload: () => {
+    getUser();
     getModels();
   },
 } satisfies RouteDefinition;
 
 export default function Chat() {
+  createProtectedRoute();
   const [messages, setMessages] = createSignal<Message[]>([
     {
       id: "welcome",

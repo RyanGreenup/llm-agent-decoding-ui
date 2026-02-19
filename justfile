@@ -4,7 +4,7 @@ init:
     bun install
 
 dev: init
-    bun run dev
+    bun run dev --host
 
 build:
     docker compose build --no-cache
@@ -24,3 +24,7 @@ up: check build down up-only
 
 
 rebuild: down build up
+
+# User management (create-user <name>, update-password, delete-user)
+manage-users *ARGS:
+    uv run scripts/manage_users.py {{ARGS}}

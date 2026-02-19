@@ -155,7 +155,6 @@ export const login = action(async (formData: FormData) => {
       details: "Invalid credentials",
       ipAddress: ip,
     });
-    console.warn(`Login failed for "${username}"`);
     return err as Error;
   }
   throw redirect("/");

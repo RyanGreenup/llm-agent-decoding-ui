@@ -1,20 +1,20 @@
 /**
- * Authentication database module using PostgreSQL
+ * Authentication database module using SQLite
  *
  * This module provides user lookup functions for authentication.
  * User management (create, update, delete) is handled via Python scripts
- * in the scripts/ directory that connect directly to PostgreSQL.
+ * in the scripts/ directory that connect directly to the database.
  *
  * Security notes:
  * - Passwords are stored as bcrypt hashes (never plain text)
  * - All functions use parameterized queries to prevent SQL injection
- * - Uses a restricted database user with minimal permissions
+ * - Uses a restricted set of read-only queries
  */
 
 "use server";
 
 import { User } from ".";
-import { executeAuthQueryOne } from "../db/postgres/auth-pool";
+import { executeAuthQueryOne } from "../db/sqlite";
 
 /**
  * Find a user by their username
@@ -26,9 +26,9 @@ export async function findUserByUsername(
   username: string,
 ): Promise<User | undefined> {
   return executeAuthQueryOne<User>(
-    `SELECT user_id AS id, username, client_id AS "clientId", role
-     FROM auth.user_credentials
-     WHERE username = $1`,
+    `SELECT user_id AS id, username, client_id AS clientId, role
+     FROM user_credentials
+     WHERE username = ?`,
     [username],
   );
 }
@@ -41,9 +41,9 @@ export async function findUserByUsername(
  */
 export async function findUserById(id: string): Promise<User | undefined> {
   return executeAuthQueryOne<User>(
-    `SELECT user_id AS id, username, client_id AS "clientId", role
-     FROM auth.user_credentials
-     WHERE user_id = $1`,
+    `SELECT user_id AS id, username, client_id AS clientId, role
+     FROM user_credentials
+     WHERE user_id = ?`,
     [id],
   );
 }
@@ -60,9 +60,8 @@ export async function getUserPasswordHash(
   username: string,
 ): Promise<string | undefined> {
   const result = await executeAuthQueryOne<{ password_hash: string }>(
-    `SELECT password_hash FROM auth.user_credentials WHERE username = $1`,
+    `SELECT password_hash FROM user_credentials WHERE username = ?`,
     [username],
   );
   return result?.password_hash;
 }
-

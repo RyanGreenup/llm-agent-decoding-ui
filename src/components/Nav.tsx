@@ -1,5 +1,5 @@
 import { A, createAsync, useLocation, useSubmission } from "@solidjs/router";
-import { Show } from "solid-js";
+import { ErrorBoundary, Show, Suspense } from "solid-js";
 import FileText from "lucide-solid/icons/file-text";
 import MessageSquare from "lucide-solid/icons/message-square";
 import FileDown from "lucide-solid/icons/file-down";
@@ -104,46 +104,56 @@ function UserDropdown() {
   const loggingOut = useSubmission(logout);
 
   return (
-    <Show when={user()}>
-      <div class="dropdown dropdown-end">
-        <div
-          tabindex="0"
-          role="button"
-          class="btn btn-ghost btn-circle avatar placeholder"
-        >
-          <div class="w-10 rounded-full bg-neutral text-neutral-content">
-            <User class="h-5 w-5" />
+    <ErrorBoundary fallback={() => null}>
+      <Suspense
+        fallback={(
+          <div class="btn btn-ghost btn-circle avatar placeholder" aria-hidden="true">
+            <div class="w-10 rounded-full bg-base-200" />
           </div>
-        </div>
-        <ul
-          tabindex="0"
-          class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
-        >
-          <li class="menu-title">
-            <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
-              Account
-            </span>
-          </li>
-          <li>
-            <span class="text-sm text-base-content/70 cursor-default hover:bg-transparent">
-              {user()!.username}
-            </span>
-          </li>
-          <div class="divider my-1" />
-          <li>
-            <form action={logout} method="post">
-              <button
-                type="submit"
-                class="text-error w-full text-left flex items-center gap-2"
-                disabled={loggingOut.pending}
-              >
-                <LogOut class="w-4 h-4" />
-                {loggingOut.pending ? "Logging out..." : "Logout"}
-              </button>
-            </form>
-          </li>
-        </ul>
-      </div>
-    </Show>
+        )}
+      >
+        <Show when={user()}>
+          <div class="dropdown dropdown-end">
+            <div
+              tabindex="0"
+              role="button"
+              class="btn btn-ghost btn-circle avatar placeholder"
+            >
+              <div class="w-10 rounded-full bg-neutral text-neutral-content">
+                <User class="h-5 w-5" />
+              </div>
+            </div>
+            <ul
+              tabindex="0"
+              class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
+            >
+              <li class="menu-title">
+                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                  Account
+                </span>
+              </li>
+              <li>
+                <span class="text-sm text-base-content/70 cursor-default hover:bg-transparent">
+                  {user()!.username}
+                </span>
+              </li>
+              <div class="divider my-1" />
+              <li>
+                <form action={logout} method="post">
+                  <button
+                    type="submit"
+                    class="text-error w-full text-left flex items-center gap-2"
+                    disabled={loggingOut.pending}
+                  >
+                    <LogOut class="w-4 h-4" />
+                    {loggingOut.pending ? "Logging out..." : "Logout"}
+                  </button>
+                </form>
+              </li>
+            </ul>
+          </div>
+        </Show>
+      </Suspense>
+    </ErrorBoundary>
   );
 }

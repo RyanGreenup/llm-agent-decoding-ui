@@ -1,0 +1,91 @@
+{
+  "metadata": {
+    "version": "2.4 (Effective 1 July 2025)",
+    "effectiveDate": "1 July 2025",
+    "fundName": "NovigiSuper",
+    "fundType": null,
+    "sectors": null
+  },
+  "joiningRequirements": {
+    "residencyRequirement": "Australian resident, regardless of your employment status"
+  },
+  "currentProducts": {
+    "description": "Products and fees currently open to all members (Section 7 of a typical PDS)",
+    "investmentOptions": [
+      {
+        "name": "Conservative",
+        "returnRate": "4.5%",
+        "riskLevel": "Low"
+      },
+      {
+        "name": "Balanced Index",
+        "returnRate": "6.2%",
+        "riskLevel": "Medium"
+      },
+      {
+        "name": "High Growth",
+        "returnRate": "8.5%",
+        "riskLevel": "High"
+      }
+    ],
+    "fees": {
+      "investmentFee": "0.60% p.a.",
+      "administrationFee": "$3.00 per week",
+      "buySellSpread": "Nil",
+      "exitFee": "$0.00"
+    }
+  },
+  "legacyProducts": {
+    "eligibilityNote": null,
+    "investmentOptions": [
+      {
+        "name": "Conservative",
+        "returnRate": "3.0%"
+      },
+      {
+        "name": "High Growth",
+        "returnRate": "7.0%"
+      }
+    ],
+    "fees": {
+      "investmentFee": "1.2% p.a.",
+      "administrationFee": null,
+      "buySellSpread": null,
+      "exitFee": null
+    }
+  },
+  "insurance": [
+    {
+      "type": "Death & TPD",
+      "premium": "$0.45 per $1,000 of cover per week"
+    }
+  ],
+  "preservationAges": [
+    {
+      "dateOfBirthRange": "Before 1 July 1960",
+      "preservationAge": 55
+    },
+    {
+      "dateOfBirthRange": "Between 1 July 1960 and 30 June 1961",
+      "preservationAge": 56
+    },
+    {
+      "dateOfBirthRange": "After 1 July 1964",
+      "preservationAge": 60
+    }
+  ],
+  "taxation": [
+    {
+      "category": "Concessional contributions",
+      "rate": "15%"
+    },
+    {
+      "category": "Investment earnings",
+      "rate": "up to 15%"
+    },
+    {
+      "category": "Withdrawals",
+      "rate": "tax-free for members aged 60 and over"
+    }
+  ]
+}

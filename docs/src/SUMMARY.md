@@ -18,6 +18,7 @@
     - [UI Components](./ui-components.md)
 - [Styling](./styling.md)
 - [Data Pipeline](./data-pipeline.md)
+- [LLM Tracing](./tracing.md)
 
 ---
 

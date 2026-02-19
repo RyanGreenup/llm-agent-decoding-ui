@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { PdsData } from "./pds-schema";
 import { DEFAULT_MODEL_ID } from "../config";
+import { getOpenAIClient } from "../openai/server";
 
 // ── verification result schema ──────────────────────────────────
 
@@ -108,7 +109,7 @@ export async function verifyExtraction(
 ): Promise<VerificationResult> {
   "use server";
 
-  const client = new OpenAI();
+  const client = await getOpenAIClient();
   const userContent = `## SOURCE MARKDOWN\n\n${markdown}\n\n## EXTRACTED JSON\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
 
   const completion = await client.chat.completions.parse({

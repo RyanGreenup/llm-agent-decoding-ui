@@ -6,6 +6,7 @@ import { PdsSchema, type PdsData } from "./pds-schema";
 import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
 import { validateExtraction } from "./validate-extraction";
 import { DEFAULT_MODEL_ID } from "../config";
+import { getOpenAIClient } from "../openai/server";
 import type {
   ExtractionRound,
   ExtractionTrace,
@@ -50,7 +51,7 @@ export async function extractPdsData(
   markdown: string,
 ): Promise<ExtractionResult> {
   "use server";
-  const client = getClient();
+  const client = await getOpenAIClient();
   const pipelineStart = performance.now();
   const rounds: ExtractionRound[] = [];
 
@@ -157,15 +158,6 @@ async function extractAndValidate(
 }
 
 // ── Utilities ───────────────────────────────────────────────────
-
-let _client: OpenAI | undefined;
-
-function getClient(): OpenAI {
-  if (!_client) {
-    _client = new OpenAI(); // reads OPENAI_API_KEY from env
-  }
-  return _client;
-}
 
 function toTokenUsage(
   usage: OpenAI.Completions.CompletionUsage | undefined,

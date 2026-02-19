@@ -5,17 +5,9 @@ import type { RunnableToolFunctionWithoutParse } from "openai/lib/RunnableFuncti
 import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
 import { extractPdsData } from "~/lib/extraction/extract-pds";
+import { getOpenAIClient } from "~/lib/openai/server";
 import type { PdsData } from "~/lib/extraction/pds-schema";
 import { getModels } from "~/lib/models";
-
-let _client: OpenAI | undefined;
-
-function getClient(): OpenAI {
-  if (!_client) {
-    _client = new OpenAI();
-  }
-  return _client;
-}
 
 const BASE_SYSTEM_PROMPT = `# Identity
 You are a precise document analyst helping a user understand a document.
@@ -119,7 +111,7 @@ export async function stuffedChat(
   model?: string,
 ): Promise<string> {
   "use server";
-  const client = getClient();
+  const client = await getOpenAIClient();
   const text = await readDocument(documentPath);
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -158,7 +150,7 @@ export async function stuffedChatStream(
   model?: string,
 ): Promise<string> {
   "use server";
-  const client = getClient();
+  const client = await getOpenAIClient();
   const text = await readDocument(documentPath);
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [

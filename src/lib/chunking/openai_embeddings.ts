@@ -1,4 +1,6 @@
-import { Providers } from "../openai_provider.ts";
+"use server";
+
+import { Providers } from "../openai_provider";
 
 interface EmbeddingResponse {
   data: Array<{
@@ -49,6 +51,8 @@ export async function embed(
   provider = "openai",
   model?: string,
 ): Promise<number[][]> {
+  "use server";
+
   if (texts.length === 0) {
     return [];
   }

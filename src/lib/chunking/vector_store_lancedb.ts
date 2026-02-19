@@ -1,8 +1,10 @@
+"use server";
+
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as lancedb from "@lancedb/lancedb";
-import { embed } from "./openai_embeddings.ts";
+import { embed } from "./openai_embeddings";
 
 export interface StoredChunk {
   text: string;
@@ -75,6 +77,8 @@ export class VectorStore {
   }
 
   async add_chunks(chunks: StoredChunk[]): Promise<void> {
+    "use server";
+
     if (chunks.length === 0) return;
 
     const rows = chunks.map((c) => ({
@@ -101,6 +105,8 @@ export class VectorStore {
     provider = "openai",
     model?: string,
   ): Promise<void> {
+    "use server";
+
     const embeddings = await embed(texts, provider, model);
     const chunks: StoredChunk[] = texts.map((text, i) => ({
       text,
@@ -111,6 +117,8 @@ export class VectorStore {
   }
 
   async search(query_embedding: number[], top_k = 3): Promise<StoredChunk[]> {
+    "use server";
+
     const table = await this.#tablePromise;
     if (table === null) return [];
 
@@ -132,6 +140,8 @@ export class VectorStore {
     top_k = 20,
     query_text?: string,
   ): Promise<ChunkResult[]> {
+    "use server";
+
     const table = await this.#tablePromise;
     if (table === null) return [];
 

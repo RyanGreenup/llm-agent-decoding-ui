@@ -1,5 +1,5 @@
 import type { ParentProps } from "solid-js";
-import { splitProps } from "solid-js";
+import { Show, splitProps } from "solid-js";
 
 interface HeroProps {
   title: string;
@@ -14,7 +14,9 @@ export default function Hero(props: ParentProps<HeroProps>) {
       <div class="hero-content text-center">
         <div class="max-w-md">
           <h1 class="text-5xl font-bold">{local.title}</h1>
-          {local.subtitle && <p class="py-6">{local.subtitle}</p>}
+          <Show when={local.subtitle}>
+            <p class="py-6">{local.subtitle}</p>
+          </Show>
           {local.children}
         </div>
       </div>

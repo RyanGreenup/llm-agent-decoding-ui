@@ -13,19 +13,11 @@ import type {
   TokenUsage,
 } from "../types";
 
-let _client: OpenAI | undefined;
+// ── Prompts & config ────────────────────────────────────────────
 
-function getClient(): OpenAI {
-  if (!_client) {
-    _client = new OpenAI(); // reads OPENAI_API_KEY from env
-  }
-  return _client;
-}
-
-/** Cap reflection rounds to bound context growth and API cost. */
 const MAX_REFLECTION_ROUNDS = 2;
 
-const SYSTEM_PROMPT = `You are a specialist data-extraction assistant for Australian superannuation Product Disclosure Statements (PDS).
+const EXTRACTION_SYSTEM_PROMPT = `You are a specialist data-extraction assistant for Australian superannuation Product Disclosure Statements (PDS).
 
 Your task is to read the provided PDS markdown and extract structured data into the given JSON schema.
 
@@ -45,40 +37,7 @@ Rules:
 
 Validator report:`;
 
-function toTokenUsage(
-  usage: OpenAI.Completions.CompletionUsage | undefined,
-): TokenUsage | null {
-  if (!usage) return null;
-  return {
-    promptTokens: usage.prompt_tokens,
-    completionTokens: usage.completion_tokens,
-    totalTokens: usage.total_tokens,
-  };
-}
-
-function buildTrace(
-  rounds: ExtractionRound[],
-  pipelineStartMs: number,
-): ExtractionTrace {
-  const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-  for (const r of rounds) {
-    if (r.usage) {
-      totalUsage.promptTokens += r.usage.promptTokens;
-      totalUsage.completionTokens += r.usage.completionTokens;
-      totalUsage.totalTokens += r.usage.totalTokens;
-    }
-  }
-  return {
-    rounds,
-    totalDurationMs: performance.now() - pipelineStartMs,
-    totalUsage,
-    finalPassed: rounds.at(-1)?.passed ?? false,
-    reflectionCount: rounds.filter((r) => r.role === "reflection").length,
-    model: DEFAULT_MODEL_ID,
-  };
-}
-
-// ── shared: call LLM + validate ─────────────────────────────────
+// ── Pipeline entry points ───────────────────────────────────────
 
 interface RoundOutput {
   round: ExtractionRound;
@@ -86,7 +45,71 @@ interface RoundOutput {
   messageContent: string;
 }
 
-async function callAndValidate(
+/** Extract structured PDS data from markdown, reflecting on validation failures up to N times. */
+export async function extractPdsData(
+  markdown: string,
+): Promise<ExtractionResult> {
+  "use server";
+  const client = getClient();
+  const pipelineStart = performance.now();
+  const rounds: ExtractionRound[] = [];
+
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+    { role: "user", content: markdown },
+  ];
+
+  // Initial extraction
+  let result = await extractAndValidate(client, messages, markdown, 0, "initial_extraction", null);
+  rounds.push(result.round);
+
+  // Feed validation failures back for self-correction
+  for (let i = 1; i <= MAX_REFLECTION_ROUNDS && !result.round.passed; i++) {
+    result = await reflectAndValidate(client, messages, markdown, result, i);
+    rounds.push(result.round);
+  }
+
+  if (!result.round.passed) {
+    console.warn(
+      `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
+    );
+  }
+
+  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+}
+
+/** Read a document from disk and run the extraction pipeline. */
+export async function extractPdsFromFile(
+  path: string,
+): Promise<ExtractionResult> {
+  "use server";
+  const markdown = await readDocument(path);
+  return extractPdsData(markdown);
+}
+
+// ── Pipeline steps ──────────────────────────────────────────────
+
+/** Append the previous answer + validator feedback to the conversation, then re-extract. */
+async function reflectAndValidate(
+  client: OpenAI,
+  messages: OpenAI.ChatCompletionMessageParam[],
+  markdown: string,
+  previous: RoundOutput,
+  reflectionIndex: number,
+): Promise<RoundOutput> {
+  messages.push(
+    { role: "assistant", content: previous.messageContent },
+    { role: "user", content: `${REFLECTION_PROMPT}\n\n${previous.round.validationFeedback}` },
+  );
+
+  return extractAndValidate(
+    client, messages, markdown,
+    reflectionIndex, "reflection", previous.round.validationFeedback,
+  );
+}
+
+/** Call the LLM for structured extraction, then validate the result against source markdown. */
+async function extractAndValidate(
   client: OpenAI,
   messages: OpenAI.ChatCompletionMessageParam[],
   markdown: string,
@@ -133,85 +156,46 @@ async function callAndValidate(
   };
 }
 
-// ── Step 1: Forward pass ────────────────────────────────────────
-// Fresh LLM call that produces structured JSON from the markdown.
+// ── Utilities ───────────────────────────────────────────────────
 
-async function forwardPass(
-  client: OpenAI,
-  messages: OpenAI.ChatCompletionMessageParam[],
-  markdown: string,
-): Promise<RoundOutput> {
-  return callAndValidate(client, messages, markdown, 0, "initial_extraction", null);
-}
+let _client: OpenAI | undefined;
 
-// ── Steps 2-3: Reflect ──────────────────────────────────────────
-// Appends the previous answer + validator feedback to the conversation,
-// then calls the LLM again so it can self-correct.
-
-async function reflect(
-  client: OpenAI,
-  messages: OpenAI.ChatCompletionMessageParam[],
-  markdown: string,
-  previous: RoundOutput,
-  reflectionIndex: number,
-): Promise<RoundOutput> {
-  messages.push(
-    { role: "assistant", content: previous.messageContent },
-    { role: "user", content: `${REFLECTION_PROMPT}\n\n${previous.round.validationFeedback}` },
-  );
-
-  return callAndValidate(
-    client, messages, markdown,
-    reflectionIndex, "reflection", previous.round.validationFeedback,
-  );
-}
-
-// ── pipeline ────────────────────────────────────────────────────
-
-export async function extractPdsData(
-  markdown: string,
-): Promise<ExtractionResult> {
-  "use server";
-  const client = getClient();
-  const pipelineStart = performance.now();
-  const rounds: ExtractionRound[] = [];
-
-  const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: markdown },
-  ];
-
-  // Step 1: Forward pass
-  let result = await forwardPass(client, messages, markdown);
-  rounds.push(result.round);
-
-  if (result.round.passed) {
-    return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+function getClient(): OpenAI {
+  if (!_client) {
+    _client = new OpenAI(); // reads OPENAI_API_KEY from env
   }
+  return _client;
+}
 
-  // Steps 2-3: Reflect (bounded by MAX_REFLECTION_ROUNDS).
-  // Step 4 (independent LLM verification) runs after this loop —
-  // see verify-extraction.ts.
-  for (let i = 1; i <= MAX_REFLECTION_ROUNDS; i++) {
-    result = await reflect(client, messages, markdown, result, i);
-    rounds.push(result.round);
+function toTokenUsage(
+  usage: OpenAI.Completions.CompletionUsage | undefined,
+): TokenUsage | null {
+  if (!usage) return null;
+  return {
+    promptTokens: usage.prompt_tokens,
+    completionTokens: usage.completion_tokens,
+    totalTokens: usage.total_tokens,
+  };
+}
 
-    if (result.round.passed) {
-      return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+function buildTrace(
+  rounds: ExtractionRound[],
+  pipelineStartMs: number,
+): ExtractionTrace {
+  const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  for (const r of rounds) {
+    if (r.usage) {
+      totalUsage.promptTokens += r.usage.promptTokens;
+      totalUsage.completionTokens += r.usage.completionTokens;
+      totalUsage.totalTokens += r.usage.totalTokens;
     }
   }
-
-  // Retries exhausted — return best effort.
-  console.warn(
-    `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
-  );
-  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
-}
-
-export async function extractPdsFromFile(
-  path: string,
-): Promise<ExtractionResult> {
-  "use server";
-  const markdown = await readDocument(path);
-  return extractPdsData(markdown);
+  return {
+    rounds,
+    totalDurationMs: performance.now() - pipelineStartMs,
+    totalUsage,
+    finalPassed: rounds.at(-1)?.passed ?? false,
+    reflectionCount: rounds.filter((r) => r.role === "reflection").length,
+    model: DEFAULT_MODEL_ID,
+  };
 }

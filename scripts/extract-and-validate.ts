@@ -22,11 +22,12 @@ import {
 import { readDocument } from "../src/lib/dataCleaning/convert_to_markdown.ts";
 import { DEFAULT_MODEL_ID } from "../src/lib/config.ts";
 
-const DEV = true;
+// ── Prompts & config ────────────────────────────────────────────
+// Duplicated from extract-pds.ts (can't import due to SolidStart path aliases).
 
-// ── prompts (mirrored from extract-pds.ts) ──────────────────────
+const MAX_REFLECTION_ROUNDS = 2;
 
-const SYSTEM_PROMPT = `You are a specialist data-extraction assistant for Australian superannuation Product Disclosure Statements (PDS).
+const EXTRACTION_SYSTEM_PROMPT = `You are a specialist data-extraction assistant for Australian superannuation Product Disclosure Statements (PDS).
 
 Your task is to read the provided PDS markdown and extract structured data into the given JSON schema.
 
@@ -46,28 +47,23 @@ Rules:
 
 Validator report:`;
 
-const MAX_REFLECTION_ROUNDS = 2;
+// ── Step 1: Extract with reflection loop ────────────────────────
 
-// ── extraction ──────────────────────────────────────────────────
-
+/** Run extraction → validate → reflect loop, returning best-effort data and any remaining report. */
 async function extract(markdown: string, model: string): Promise<{ data: PdsData; report: string | null }> {
   const client = new OpenAI();
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
     { role: "user", content: markdown },
   ];
 
-  if (DEV) {
-    const tokenEst = Math.round(markdown.length / 4);
-    console.log(`  system prompt: ${SYSTEM_PROMPT.length} chars`);
-    console.log(`  input markdown: ${markdown.length} chars (~${tokenEst} tokens)`);
-  }
+  console.log(`  input markdown: ${markdown.length} chars (~${Math.round(markdown.length / 4)} tokens)`);
 
   let lastParsed: PdsData | undefined;
   let lastReport: string | null = null;
 
   for (let attempt = 0; attempt <= MAX_REFLECTION_ROUNDS; attempt++) {
-    const label = attempt === 0 ? "initial extraction" : `reflection ${attempt}/${MAX_REFLECTION_ROUNDS}`;
+    const label = attempt === 0 ? "extract" : `reflect ${attempt}/${MAX_REFLECTION_ROUNDS}`;
     console.log(`  [${label}] calling ${model}...`);
     const t0 = performance.now();
 
@@ -78,14 +74,7 @@ async function extract(markdown: string, model: string): Promise<{ data: PdsData
       response_format: zodResponseFormat(PdsSchema, "pds_extraction"),
     });
 
-    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-    const usage = completion.usage;
-
-    if (DEV && usage) {
-      console.log(`  [${label}] ${elapsed}s | prompt: ${usage.prompt_tokens} tok, completion: ${usage.completion_tokens} tok, total: ${usage.total_tokens} tok`);
-    } else {
-      console.log(`  [${label}] ${elapsed}s`);
-    }
+    logUsage(label, t0, completion.usage);
 
     const message = completion.choices[0]?.message;
     const parsed = message?.parsed;
@@ -93,47 +82,32 @@ async function extract(markdown: string, model: string): Promise<{ data: PdsData
 
     lastParsed = parsed;
     lastReport = validateExtraction(parsed, markdown);
-
-    if (DEV) {
-      if (lastReport) {
-        console.log(`  [${label}] grounding check FAILED:`);
-        for (const line of lastReport.split("\n").slice(0, 10)) {
-          console.log(`    ${line}`);
-        }
-        if (lastReport.split("\n").length > 10) console.log(`    ... (truncated)`);
-      } else {
-        console.log(`  [${label}] grounding check passed`);
-      }
-    }
+    logValidation(label, lastReport);
 
     if (!lastReport) return { data: parsed, report: null };
 
+    // Append assistant reply + validator feedback for the next reflection round
     if (attempt < MAX_REFLECTION_ROUNDS) {
       messages.push(
         { role: "assistant", content: message.content ?? "" },
         { role: "user", content: `${REFLECTION_PROMPT}\n\n${lastReport}` },
       );
-      if (DEV) {
-        const totalChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
-        console.log(`  context so far: ${messages.length} messages, ~${totalChars} chars`);
-      }
+      const totalChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+      console.log(`  context so far: ${messages.length} messages, ~${totalChars} chars`);
     }
   }
 
   return { data: lastParsed!, report: lastReport };
 }
 
-// ── verification (fresh agent) ──────────────────────────────────
+// ── Step 2: Independent LLM verification ────────────────────────
 
+/** Fresh-agent verification: compare extracted JSON against source markdown for errors. */
 async function verify(data: PdsData, markdown: string, model: string): Promise<VerificationResult> {
   const client = new OpenAI();
   const userContent = `## SOURCE MARKDOWN\n\n${markdown}\n\n## EXTRACTED JSON\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
 
-  if (DEV) {
-    console.log(`  system prompt: ${VERIFY_SYSTEM_PROMPT.length} chars`);
-    console.log(`  user message: ${userContent.length} chars (~${Math.round(userContent.length / 4)} tokens)`);
-  }
-
+  console.log(`  verification input: ${userContent.length} chars (~${Math.round(userContent.length / 4)} tokens)`);
   console.log(`  [verify] calling ${model}...`);
   const t0 = performance.now();
 
@@ -147,43 +121,58 @@ async function verify(data: PdsData, markdown: string, model: string): Promise<V
     response_format: zodResponseFormat(VerificationSchema, "pds_verification"),
   });
 
-  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  const usage = completion.usage;
-
-  if (DEV && usage) {
-    console.log(`  [verify] ${elapsed}s | prompt: ${usage.prompt_tokens} tok, completion: ${usage.completion_tokens} tok, total: ${usage.total_tokens} tok`);
-  } else {
-    console.log(`  [verify] ${elapsed}s`);
-  }
+  logUsage("verify", t0, completion.usage);
 
   const parsed = completion.choices[0]?.message.parsed;
   if (!parsed) throw new Error("Verification failed: no parsed response");
 
-  // trace the structured result
-  if (DEV) {
-    console.log(`  [verify] verdict: ${parsed.verdict}`);
-    if (parsed.issues.length > 0) {
-      console.log(`  [verify] ${parsed.issues.length} issue(s):`);
-      for (const issue of parsed.issues) {
-        const icon = issue.severity === "error" ? "x" : "!";
-        console.log(`    [${icon}] ${issue.field} (${issue.severity})`);
-        console.log(`        extracted: ${issue.extractedValue ?? "(null)"}`);
-        console.log(`        expected:  ${issue.expectedValue ?? "(null)"}`);
-        console.log(`        reason:    ${issue.explanation}`);
-      }
-    }
-    if (parsed.missedData.length > 0) {
-      console.log(`  [verify] ${parsed.missedData.length} missed data point(s):`);
-      for (const m of parsed.missedData) {
-        console.log(`    - ${m.description}`);
-        console.log(`      quote: "${m.sourceQuote}"`);
-        if (m.suggestedField) console.log(`      suggested field: ${m.suggestedField}`);
-      }
-    }
-    console.log(`  [verify] summary: ${parsed.summary}`);
-  }
-
+  logVerification(parsed);
   return parsed;
+}
+
+// ── Logging helpers ─────────────────────────────────────────────
+
+function logUsage(label: string, t0: number, usage: OpenAI.Completions.CompletionUsage | undefined) {
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  if (usage) {
+    console.log(`  [${label}] ${elapsed}s | prompt: ${usage.prompt_tokens} tok, completion: ${usage.completion_tokens} tok, total: ${usage.total_tokens} tok`);
+  } else {
+    console.log(`  [${label}] ${elapsed}s`);
+  }
+}
+
+function logValidation(label: string, report: string | null) {
+  if (!report) {
+    console.log(`  [${label}] grounding check passed`);
+    return;
+  }
+  console.log(`  [${label}] grounding check FAILED:`);
+  const lines = report.split("\n");
+  for (const line of lines.slice(0, 10)) console.log(`    ${line}`);
+  if (lines.length > 10) console.log(`    ... (truncated)`);
+}
+
+function logVerification(result: VerificationResult) {
+  console.log(`  [verify] verdict: ${result.verdict}`);
+  if (result.issues.length > 0) {
+    console.log(`  [verify] ${result.issues.length} issue(s):`);
+    for (const issue of result.issues) {
+      const icon = issue.severity === "error" ? "x" : "!";
+      console.log(`    [${icon}] ${issue.field} (${issue.severity})`);
+      console.log(`        extracted: ${issue.extractedValue ?? "(null)"}`);
+      console.log(`        expected:  ${issue.expectedValue ?? "(null)"}`);
+      console.log(`        reason:    ${issue.explanation}`);
+    }
+  }
+  if (result.missedData.length > 0) {
+    console.log(`  [verify] ${result.missedData.length} missed data point(s):`);
+    for (const m of result.missedData) {
+      console.log(`    - ${m.description}`);
+      console.log(`      quote: "${m.sourceQuote}"`);
+      if (m.suggestedField) console.log(`      suggested field: ${m.suggestedField}`);
+    }
+  }
+  console.log(`  [verify] summary: ${result.summary}`);
 }
 
 // ── CLI ─────────────────────────────────────────────────────────
@@ -216,8 +205,7 @@ console.log(`Reading ${inputPath}...`);
 const markdown = await readDocument(inputPath);
 console.log(`  ${markdown.length} chars of markdown`);
 
-// ── step 1: extract + deterministic grounding ───────────────────
-
+// Step 1: Extract + deterministic grounding
 console.log(`\n== Step 1: Extract (with ${model}) ==`);
 const { data, report } = await extract(markdown, model);
 
@@ -229,16 +217,14 @@ if (report) {
   console.error(report);
 }
 
-// ── step 2: independent LLM verification ────────────────────────
-
+// Step 2: Independent LLM verification
 console.log(`\n== Step 2: Verify (fresh agent, ${model}) ==`);
 const verification = await verify(data, markdown, model);
 
 await writeFile(verifyPath, JSON.stringify(verification, null, 2));
 console.log(`Verification written to ${verifyPath}`);
 
-// ── step 3: run deterministic grounding on verification fixes ───
-
+// Results summary
 const errorIssues = verification.issues.filter((i) => i.severity === "error");
 const warnIssues = verification.issues.filter((i) => i.severity === "warning");
 

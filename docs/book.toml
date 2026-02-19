@@ -1,0 +1,14 @@
+[book]
+title = "My Docs"
+authors = ["Ryan"]
+language = "en"
+
+[preprocessor.variables.variables]
+google_dns = "8.8.8.8"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+additional-css = ["src/custom.css"]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]

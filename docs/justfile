@@ -1,0 +1,77 @@
+# Set shell to zsh (with -c to run command, -u to error on undefined vars)
+set shell := ["zsh", "-cu"]
+
+# Use just's native function to get the absolute path of this file's folder
+project_root := justfile_directory()
+
+# -----------------------------------------------------------------------------
+# REMOTE CONFIGURATION
+# -----------------------------------------------------------------------------
+
+# 1. The Parent Directory: Where the applications live
+remote_parent := "user@thebes:/mnt/volume_syd1_05/Applications"
+
+# 2. The Static Folder Name: This enforces the directory name on the server
+#    regardless of what your local folder is named.
+remote_folder_name := "gforce_docs"
+
+# 3. The Full Path: We construct this to ensure rsync targets this EXACT folder
+remote_full_dest := remote_parent / remote_folder_name
+
+# -----------------------------------------------------------------------------
+# RECIPES
+# -----------------------------------------------------------------------------
+
+default: build
+
+# Check required commands exist
+[private]
+check-deps:
+    @command -v mdbook >/dev/null || (echo "mdbook not found. Run: cargo install mdbook" && exit 1)
+    @command -v mdbook-mermaid >/dev/null || (echo "mdbook-mermaid not found. Run: just init" && exit 1)
+    @command -v mdbook-variables >/dev/null || (echo "mdbook-variables not found. Run: just init" && exit 1)
+
+# Ensure mermaid JS files exist
+[private]
+ensure-mermaid:
+    @test -f "{{project_root}}/mermaid.min.js" || mdbook-mermaid install "{{project_root}}"
+
+build: check-deps ensure-mermaid
+    mdbook build
+
+deploy: build check-links find-orphans
+    @echo "Deploying ROOT to: {{remote_full_dest}}"
+
+    # 1. We append a slash to project_root/ to copy CONTENTS, not the folder itself.
+    # 2. We target {{remote_full_dest}} explicitly so --delete is contained to that folder.
+    # 3. We exclude 'target' because compiled Rust artifacts are huge and OS-specific.
+    # 4. We exclude '.git' to save bandwidth (remove this line if you need git history on server).
+
+    rsync -avh --delete \
+        --exclude 'target' \
+        --exclude '.git' \
+        "{{project_root}}/" \
+        "{{remote_full_dest}}"
+
+
+push: 
+    mdbook  build # ensure it builds first
+    gitui
+    git push
+    @just deploy
+
+watch: check-deps ensure-mermaid
+    mdbook serve -p 8372
+
+move-note source dest:
+    uv run utils/move_note.py {{source}} {{dest}}
+
+check-links:
+    uv run utils/check_links.py
+
+find-orphans:
+    uv run utils/find_orphans.py
+
+init:
+    cargo install mdbook-mermaid mdbook-variables
+    mdbook-mermaid install "{{project_root}}"

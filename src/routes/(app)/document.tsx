@@ -1,11 +1,9 @@
 import { Suspense } from "solid-js";
 import { createAsync, useSubmission, type RouteDefinition } from "@solidjs/router";
-import { clientOnly } from "@solidjs/start";
 import Card from "~/components/Card";
+import MarkdownPreview from "~/components/MarkdownPreview";
 import { getConvertedDocument, reconvertDocument } from "~/lib/dataCleaning/queries";
 import { createProtectedRoute, getUser } from "~/lib/auth";
-
-const MarkdownPreview = clientOnly(() => import("~/components/MarkdownPreview"));
 
 export const route = {
   preload: () => {
@@ -44,6 +42,7 @@ export default function Document() {
         <Card title={doc()?.path}>
           <MarkdownPreview
             markdown={doc()?.markdown ?? ""}
+            class="bg-base-200 p-4 rounded-lg overflow-auto max-h-[70vh] text-sm"
             fallback={<span class="loading loading-spinner loading-sm" />}
           />
         </Card>

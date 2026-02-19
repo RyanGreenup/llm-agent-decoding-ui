@@ -21,7 +21,7 @@ export default function Chat() {
       id: "welcome",
       role: "assistant",
       content:
-        "Welcome! I'm your PDS analysis agent. Ask me anything about the NovigiSuper Product Disclosure Statement. I'll search the document, calculate figures, and verify my answers against the source.",
+        "Welcome! I'm your PDS analysis agent. Ask me anything about the NovigiSuper Product Disclosure Statement. I'll search the document, calculate figures like $A = P(1 + r)^n$, and verify my answers against the source.",
     },
   ]);
   const [input, setInput] = createSignal("");

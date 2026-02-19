@@ -2,6 +2,7 @@ import { For, Show, type Accessor } from "solid-js";
 import { USER_LOGO } from "~/lib/config";
 import type { Message } from "~/lib/types";
 import AvatarBadge from "./AvatarBadge";
+import MarkdownPreview from "./MarkdownPreview";
 import ReasoningTrace from "./ReasoningTrace";
 import ReviewBadge from "./ReviewBadge";
 import SuggestedQuestions from "./SuggestedQuestions";
@@ -37,7 +38,12 @@ export default function ChatContainer(props: ChatContainerProps) {
             <div
               class={`chat-bubble ${message.role === "user" ? "chat-bubble-primary" : "bg-base-100 text-base-content shadow-sm border border-base-300"} max-w-2xl`}
             >
-              <p>{message.content}</p>
+              <Show
+                when={message.role === "assistant"}
+                fallback={<p>{message.content}</p>}
+              >
+                <MarkdownPreview markdown={message.content} class="prose-sm" />
+              </Show>
 
               {/* Suggested Questions (only for welcome message) */}
               <Show when={message.id === "welcome"}>

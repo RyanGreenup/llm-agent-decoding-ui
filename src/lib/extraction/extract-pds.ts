@@ -78,6 +78,96 @@ function buildTrace(
   };
 }
 
+// ── shared: call LLM + validate ─────────────────────────────────
+
+interface RoundOutput {
+  round: ExtractionRound;
+  parsed: PdsData;
+  messageContent: string;
+}
+
+async function callAndValidate(
+  client: OpenAI,
+  messages: OpenAI.ChatCompletionMessageParam[],
+  markdown: string,
+  roundIndex: number,
+  role: ExtractionRound["role"],
+  input: string | null,
+): Promise<RoundOutput> {
+  const t0 = performance.now();
+
+  const completion = await client.chat.completions.parse({
+    model: DEFAULT_MODEL_ID,
+    temperature: 0,
+    messages,
+    response_format: zodResponseFormat(PdsSchema, "pds_extraction"),
+  });
+
+  const durationMs = performance.now() - t0;
+  const message = completion.choices[0]?.message;
+  const parsed = message?.parsed;
+
+  if (!parsed) {
+    throw new Error(
+      "Structured extraction failed: no parsed response returned",
+    );
+  }
+
+  const feedback = validateExtraction(parsed, markdown);
+
+  return {
+    round: {
+      round: roundIndex,
+      role,
+      input,
+      rawOutput: message.content ?? "",
+      snapshot: parsed,
+      validationFeedback: feedback,
+      passed: !feedback,
+      usage: toTokenUsage(completion.usage),
+      durationMs,
+      model: DEFAULT_MODEL_ID,
+    },
+    parsed,
+    messageContent: message.content ?? "",
+  };
+}
+
+// ── Step 1: Forward pass ────────────────────────────────────────
+// Fresh LLM call that produces structured JSON from the markdown.
+
+async function forwardPass(
+  client: OpenAI,
+  messages: OpenAI.ChatCompletionMessageParam[],
+  markdown: string,
+): Promise<RoundOutput> {
+  return callAndValidate(client, messages, markdown, 0, "initial_extraction", null);
+}
+
+// ── Steps 2-3: Reflect ──────────────────────────────────────────
+// Appends the previous answer + validator feedback to the conversation,
+// then calls the LLM again so it can self-correct.
+
+async function reflect(
+  client: OpenAI,
+  messages: OpenAI.ChatCompletionMessageParam[],
+  markdown: string,
+  previous: RoundOutput,
+  reflectionIndex: number,
+): Promise<RoundOutput> {
+  messages.push(
+    { role: "assistant", content: previous.messageContent },
+    { role: "user", content: `${REFLECTION_PROMPT}\n\n${previous.round.validationFeedback}` },
+  );
+
+  return callAndValidate(
+    client, messages, markdown,
+    reflectionIndex, "reflection", previous.round.validationFeedback,
+  );
+}
+
+// ── pipeline ────────────────────────────────────────────────────
+
 export async function extractPdsData(
   markdown: string,
 ): Promise<ExtractionResult> {
@@ -91,57 +181,23 @@ export async function extractPdsData(
     { role: "user", content: markdown },
   ];
 
-  let lastParsed: PdsData | undefined;
-  let previousFeedback: string | null = null;
+  // Step 1: Forward pass
+  let result = await forwardPass(client, messages, markdown);
+  rounds.push(result.round);
 
-  for (let attempt = 0; attempt <= MAX_REFLECTION_ROUNDS; attempt++) {
-    const roundStart = performance.now();
+  if (result.round.passed) {
+    return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+  }
 
-    const completion = await client.chat.completions.parse({
-      model: DEFAULT_MODEL_ID,
-      temperature: 0,
-      messages,
-      response_format: zodResponseFormat(PdsSchema, "pds_extraction"),
-    });
+  // Steps 2-3: Reflect (bounded by MAX_REFLECTION_ROUNDS).
+  // Step 4 (independent LLM verification) runs after this loop —
+  // see verify-extraction.ts.
+  for (let i = 1; i <= MAX_REFLECTION_ROUNDS; i++) {
+    result = await reflect(client, messages, markdown, result, i);
+    rounds.push(result.round);
 
-    const durationMs = performance.now() - roundStart;
-    const message = completion.choices[0]?.message;
-    const parsed = message?.parsed;
-
-    if (!parsed) {
-      throw new Error(
-        "Structured extraction failed: no parsed response returned",
-      );
-    }
-    lastParsed = parsed;
-
-    const feedback = validateExtraction(parsed, markdown);
-    const passed = !feedback;
-
-    rounds.push({
-      round: attempt,
-      role: attempt === 0 ? "initial_extraction" : "reflection",
-      input: previousFeedback,
-      rawOutput: message.content ?? "",
-      snapshot: parsed,
-      validationFeedback: feedback,
-      passed,
-      usage: toTokenUsage(completion.usage),
-      durationMs,
-      model: DEFAULT_MODEL_ID,
-    });
-
-    if (passed) {
-      return { data: parsed, trace: buildTrace(rounds, pipelineStart) };
-    }
-
-    previousFeedback = feedback;
-
-    if (attempt < MAX_REFLECTION_ROUNDS) {
-      messages.push(
-        { role: "assistant", content: message.content ?? "" },
-        { role: "user", content: `${REFLECTION_PROMPT}\n\n${feedback}` },
-      );
+    if (result.round.passed) {
+      return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
     }
   }
 
@@ -149,7 +205,7 @@ export async function extractPdsData(
   console.warn(
     `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
   );
-  return { data: lastParsed!, trace: buildTrace(rounds, pipelineStart) };
+  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
 }
 
 export async function extractPdsFromFile(

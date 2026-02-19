@@ -15,7 +15,7 @@ export default function ReviewBadge(props: ReviewBadgeProps) {
   return (
     <div class="flex items-center gap-2" {...rest}>
       <div
-        class={`badge badge-${local.status === "pass" ? "success" : "warning"} badge-sm gap-1`}
+        class={`badge badge-${local.status === "pass" ? "success" : "warning"} badge-sm gap-1 whitespace-nowrap`}
       >
         <Show when={local.status === "pass"}>
           <Check class="h-3 w-3" stroke-width={3} />

@@ -14,6 +14,11 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { PdsSchema, type PdsData } from "../src/lib/extraction/pds-schema.ts";
 import { validateExtraction } from "../src/lib/extraction/validate-extraction.ts";
+import {
+  VerificationSchema,
+  VERIFY_SYSTEM_PROMPT,
+  type VerificationResult,
+} from "../src/lib/extraction/verify-extraction.ts";
 import { readDocument } from "../src/lib/dataCleaning/convert_to_markdown.ts";
 import { DEFAULT_MODEL_ID } from "../src/lib/config.ts";
 
@@ -118,6 +123,69 @@ async function extract(markdown: string, model: string): Promise<{ data: PdsData
   return { data: lastParsed!, report: lastReport };
 }
 
+// ── verification (fresh agent) ──────────────────────────────────
+
+async function verify(data: PdsData, markdown: string, model: string): Promise<VerificationResult> {
+  const client = new OpenAI();
+  const userContent = `## SOURCE MARKDOWN\n\n${markdown}\n\n## EXTRACTED JSON\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
+
+  if (DEV) {
+    console.log(`  system prompt: ${VERIFY_SYSTEM_PROMPT.length} chars`);
+    console.log(`  user message: ${userContent.length} chars (~${Math.round(userContent.length / 4)} tokens)`);
+  }
+
+  console.log(`  [verify] calling ${model}...`);
+  const t0 = performance.now();
+
+  const completion = await client.chat.completions.parse({
+    model,
+    temperature: 0,
+    messages: [
+      { role: "system", content: VERIFY_SYSTEM_PROMPT },
+      { role: "user", content: userContent },
+    ],
+    response_format: zodResponseFormat(VerificationSchema, "pds_verification"),
+  });
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  const usage = completion.usage;
+
+  if (DEV && usage) {
+    console.log(`  [verify] ${elapsed}s | prompt: ${usage.prompt_tokens} tok, completion: ${usage.completion_tokens} tok, total: ${usage.total_tokens} tok`);
+  } else {
+    console.log(`  [verify] ${elapsed}s`);
+  }
+
+  const parsed = completion.choices[0]?.message.parsed;
+  if (!parsed) throw new Error("Verification failed: no parsed response");
+
+  // trace the structured result
+  if (DEV) {
+    console.log(`  [verify] verdict: ${parsed.verdict}`);
+    if (parsed.issues.length > 0) {
+      console.log(`  [verify] ${parsed.issues.length} issue(s):`);
+      for (const issue of parsed.issues) {
+        const icon = issue.severity === "error" ? "x" : "!";
+        console.log(`    [${icon}] ${issue.field} (${issue.severity})`);
+        console.log(`        extracted: ${issue.extractedValue ?? "(null)"}`);
+        console.log(`        expected:  ${issue.expectedValue ?? "(null)"}`);
+        console.log(`        reason:    ${issue.explanation}`);
+      }
+    }
+    if (parsed.missedData.length > 0) {
+      console.log(`  [verify] ${parsed.missedData.length} missed data point(s):`);
+      for (const m of parsed.missedData) {
+        console.log(`    - ${m.description}`);
+        console.log(`      quote: "${m.sourceQuote}"`);
+        if (m.suggestedField) console.log(`      suggested field: ${m.suggestedField}`);
+      }
+    }
+    console.log(`  [verify] summary: ${parsed.summary}`);
+  }
+
+  return parsed;
+}
+
 // ── CLI ─────────────────────────────────────────────────────────
 
 const { positionals, values } = parseArgs({
@@ -142,20 +210,46 @@ await mkdir(ARTIFACTS_DIR, { recursive: true });
 
 const stem = basename(inputPath, extname(inputPath));
 const outPath = values.out ?? join(ARTIFACTS_DIR, `${stem}.extracted.json`);
+const verifyPath = join(ARTIFACTS_DIR, `${stem}.verification.json`);
 
 console.log(`Reading ${inputPath}...`);
 const markdown = await readDocument(inputPath);
 console.log(`  ${markdown.length} chars of markdown`);
 
-console.log(`Extracting with ${model}...`);
+// ── step 1: extract + deterministic grounding ───────────────────
+
+console.log(`\n== Step 1: Extract (with ${model}) ==`);
 const { data, report } = await extract(markdown, model);
 
 await writeFile(outPath, JSON.stringify(data, null, 2));
 console.log(`JSON written to ${outPath}`);
 
 if (report) {
-  console.error(`\n${report}`);
+  console.error(`\nGrounding check still failing after reflection:`);
+  console.error(report);
+}
+
+// ── step 2: independent LLM verification ────────────────────────
+
+console.log(`\n== Step 2: Verify (fresh agent, ${model}) ==`);
+const verification = await verify(data, markdown, model);
+
+await writeFile(verifyPath, JSON.stringify(verification, null, 2));
+console.log(`Verification written to ${verifyPath}`);
+
+// ── step 3: run deterministic grounding on verification fixes ───
+
+const errorIssues = verification.issues.filter((i) => i.severity === "error");
+const warnIssues = verification.issues.filter((i) => i.severity === "warning");
+
+console.log(`\n== Results ==`);
+console.log(`  Deterministic grounding: ${report ? "FAIL" : "PASS"}`);
+console.log(`  LLM verification:       ${verification.verdict.toUpperCase()}`);
+console.log(`    errors:   ${errorIssues.length}`);
+console.log(`    warnings: ${warnIssues.length}`);
+console.log(`    missed:   ${verification.missedData.length}`);
+console.log(`  Summary: ${verification.summary}`);
+
+if (report || verification.verdict === "fail") {
   Deno.exit(1);
-} else {
-  console.log("\nAll fields grounded. Extraction looks good.");
 }

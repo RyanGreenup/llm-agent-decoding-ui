@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 1,
   "workspaces": {
     "": {
       "name": "example-with-tailwindcss",
@@ -8,6 +7,7 @@
         "@solidjs/router": "^0.15.0",
         "@solidjs/start": "^1.1.0",
         "daisyui": "^5.5.18",
+        "lucide-solid": "^0.574.0",
         "solid-js": "^1.9.5",
         "vinxi": "^0.5.7",
       },
@@ -722,6 +722,8 @@
     "lodash.isarguments": ["lodash.isarguments@3.1.0", "", {}, "sha512-chi4NHZlZqZD18a0imDHnZPrDeBbTtVN7GXMwuGdRH9qotxAjYs3aVLKc7zNOG9eddR5Ksd8rvFEBc9SsggPpg=="],
 
     "lru-cache": ["lru-cache@11.2.6", "", {}, "sha512-ESL2CrkS/2wTPfuend7Zhkzo2u0daGJ/A2VucJOgQ/C48S/zB8MMeMHSGKYpXhIjbPxfuezITkaBH1wqv00DDQ=="],
+
+    "lucide-solid": ["lucide-solid@0.574.0", "", { "peerDependencies": { "solid-js": "^1.4.7" } }, "sha512-fa447+mAsv7nSRgHZLfV7zurB2aFq8ih+q+MqzrZo3ljp6NqMkPXNp+vFXUCaoqTrVQ8N/b3oFcxAjqLKvsD5A=="],
 
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 

@@ -1,6 +1,9 @@
 set dotenv-load
 
-dev:
+init:
+    bun install
+
+dev: init
     bun run dev
 
 build:
@@ -12,7 +15,7 @@ down:
 up-only:
     docker compose up -d
 
-check:
+check: init
     bun run typecheck
 
 up: check build down up-only

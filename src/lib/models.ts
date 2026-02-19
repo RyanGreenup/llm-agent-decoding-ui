@@ -18,6 +18,7 @@ export const getModels = query(async (): Promise<Model[]> => {
   return [
     { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", contextWindow: 128_000, inputPrice: 2.50, outputPrice: 10.00 },
     { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", contextWindow: 128_000, inputPrice: 0.15, outputPrice: 0.60 },
+    { id: "gpt-4.1-nano", name: "GPT-4.1 Nano", provider: "OpenAI", contextWindow: 1_000_000, inputPrice: 0.10, outputPrice: 0.40 },
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "Anthropic", contextWindow: 200_000, inputPrice: 3.00, outputPrice: 15.00 },
     { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "Anthropic", contextWindow: 200_000, inputPrice: 0.80, outputPrice: 4.00 },
     { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", contextWindow: 1_000_000, inputPrice: 0.10, outputPrice: 0.40 },

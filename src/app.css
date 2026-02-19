@@ -1,4 +1,11 @@
 @import "tailwindcss";
+
+/* KaTeX math rendering */
+@import "katex/dist/katex.min.css";
+
+/* Syntax highlighting — light theme by default, dark when prefers-color-scheme: dark */
+@import "highlight.js/styles/github.css" layer(base);
+@import "highlight.js/styles/github-dark.css" layer(base) (prefers-color-scheme: dark);
 @plugin "@tailwindcss/typography";
 @plugin "daisyui";
 

@@ -1,3 +1,5 @@
+"use server";
+
 import { RecursiveChunker } from "npm:@chonkiejs/core";
 
 export interface Chunk {
@@ -272,6 +274,8 @@ export async function chunk_markdown(
     metadata = {},
   }: ChunkMarkdownOptions = {},
 ): Promise<Chunk[]> {
+  "use server";
+
   if (full_context) {
     return [{
       text,

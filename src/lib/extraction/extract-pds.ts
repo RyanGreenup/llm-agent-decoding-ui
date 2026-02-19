@@ -1,21 +1,29 @@
+"use server";
+
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { PdsSchema, type PdsData } from "./pds-schema";
 import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
+import { getRawDocPath } from "~/lib/dataCleaning/convert_to_markdown";
 import { validateExtraction } from "./validate-extraction";
-import { DEFAULT_MODEL_ID } from "../config";
+import { DEFAULT_MODEL_ID, MAX_REFLECTION_ROUNDS } from "../config";
 import { getOpenAIClient } from "../openai/server";
-import type { ExtractionPipelineEvent } from "./stream-types";
+import { requireUser } from "~/lib/auth";
+import {
+  createSession,
+  getSession as getExtractionSession,
+  deleteSession,
+} from "./session";
 import type {
+  ExtractionResult,
   ExtractionRound,
   ExtractionTrace,
-  ExtractionResult,
   TokenUsage,
 } from "../types";
 
 // ── Prompts & config ────────────────────────────────────────────
 
-const MAX_REFLECTION_ROUNDS = 2;
+// MAX_REFLECTION_ROUNDS imported from ~/lib/config (shared, not server-only)
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a specialist data-extraction assistant for Australian superannuation Product Disclosure Statements (PDS).
 
@@ -37,139 +45,162 @@ Rules:
 
 Validator report:`;
 
-// ── Pipeline entry points ───────────────────────────────────────
+// ── RPC entry points ────────────────────────────────────────────
 
-interface RoundOutput {
+export type StartExtractionResult = {
+  sessionId: string;
+  path: string;
   round: ExtractionRound;
-  parsed: PdsData;
-  messageContent: string;
-}
+  data: PdsData;
+  trace: ExtractionTrace;
+};
 
-export type ExtractionStreamEvent = ExtractionPipelineEvent;
-
-/** Extract structured PDS data from markdown, reflecting on validation failures up to N times. */
-export async function extractPdsData(
-  markdown: string,
-): Promise<ExtractionResult> {
-  "use server";
-  let finalResult: ExtractionResult | undefined;
-
-  for await (const event of extractPdsDataEvents(markdown)) {
-    if (event.type === "pipeline_completed") {
-      finalResult = event.result;
-    }
-  }
-
-  if (!finalResult) {
-    throw new Error("Extraction pipeline ended without a final result");
-  }
-
-  return finalResult;
-}
+export type ContinueExtractionResult = {
+  round: ExtractionRound;
+  data: PdsData;
+  trace: ExtractionTrace;
+  done: boolean;
+};
 
 /**
- * Stream extraction progress as discrete pipeline events.
- * Emits one event per completed round so callers can render tracing progressively.
+ * Start a new extraction pipeline: reads the document, runs the initial
+ * extractAndValidate round, stores the session for continuation, and
+ * returns the first round result.
  */
-export async function* extractPdsDataEvents(
-  markdown: string,
-): AsyncGenerator<ExtractionPipelineEvent, ExtractionResult, void> {
+export async function startExtraction(): Promise<StartExtractionResult> {
   "use server";
+  await requireUser();
+
+  const path = await getRawDocPath();
+  const markdown = await readDocument(path);
   const client = await getOpenAIClient();
   const pipelineStart = performance.now();
-  const rounds: ExtractionRound[] = [];
-
-  yield {
-    type: "pipeline_started",
-    maxReflectionRounds: MAX_REFLECTION_ROUNDS,
-  };
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
     { role: "user", content: markdown },
   ];
 
-  try {
-    // Initial extraction
-    let result = await extractAndValidate(
-      client,
-      messages,
-      markdown,
-      0,
-      "initial_extraction",
-      null,
-    );
-    rounds.push(result.round);
-    yield {
-      type: "round_completed",
-      round: result.round,
-      trace: buildTrace(rounds, pipelineStart),
-    };
+  const result = await extractAndValidate(
+    client,
+    messages,
+    markdown,
+    0,
+    "initial_extraction",
+    null,
+  );
 
-    // Feed validation failures back for self-correction
-    for (let i = 1; i <= MAX_REFLECTION_ROUNDS && !result.round.passed; i++) {
-      result = await reflectAndValidate(client, messages, markdown, result, i);
-      rounds.push(result.round);
-      yield {
-        type: "round_completed",
-        round: result.round,
-        trace: buildTrace(rounds, pipelineStart),
-      };
-    }
+  const rounds = [result.round];
+  const trace = buildTrace(rounds, pipelineStart);
 
-    if (!result.round.passed) {
-      console.warn(
-        `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
-      );
-    }
+  // Store session so the client can call continueExtraction
+  const sessionId = createSession(markdown, messages);
 
-    const finalResult = { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
-    yield { type: "pipeline_completed", result: finalResult };
-    return finalResult;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    yield { type: "pipeline_failed", error: message };
-    throw error;
-  }
+  return {
+    sessionId,
+    path,
+    round: result.round,
+    data: result.parsed,
+    trace,
+  };
 }
 
-/** Read a document from disk and run the extraction pipeline. */
-export async function extractPdsFromFile(
-  path: string,
+/**
+ * Continue an extraction session with a reflection round.
+ * Looks up the session, appends the previous assistant response + validator
+ * feedback, runs reflectAndValidate, and returns the new round.
+ */
+export async function continueExtraction(
+  sessionId: string,
+): Promise<ContinueExtractionResult> {
+  "use server";
+  await requireUser();
+
+  const session = getExtractionSession(sessionId);
+  const client = await getOpenAIClient();
+  const pipelineStart = performance.now();
+
+  // The messages array already has the reflection prompt appended from the
+  // previous round's extractAndValidate call. Derive round metadata from
+  // the conversation history.
+  const { messages, markdown } = session;
+
+  // User messages after the initial document message = reflection count
+  const userMessages = messages.filter((m) => m.role === "user");
+  const reflectionIndex = userMessages.length - 1;
+
+  // Extract validation feedback from the last reflection prompt
+  const lastReflectionMsg = [...messages].reverse().find(
+    (m) =>
+      m.role === "user" &&
+      typeof m.content === "string" &&
+      m.content.startsWith(REFLECTION_PROMPT),
+  );
+  const validationFeedback = lastReflectionMsg
+    ? (lastReflectionMsg.content as string).slice(REFLECTION_PROMPT.length).trim()
+    : null;
+
+  const result = await extractAndValidate(
+    client,
+    messages,
+    markdown,
+    reflectionIndex,
+    "reflection",
+    validationFeedback,
+  );
+
+  const done = result.round.passed;
+  const trace = buildTrace([result.round], pipelineStart);
+
+  if (done) {
+    deleteSession(sessionId);
+  }
+
+  return {
+    round: result.round,
+    data: result.parsed,
+    trace,
+    done,
+  };
+}
+
+// ── Server-to-server convenience ─────────────────────────────────
+
+/** Run the full extraction pipeline in one shot (no session needed). */
+export async function extractPdsData(
+  markdown: string,
 ): Promise<ExtractionResult> {
   "use server";
-  const markdown = await readDocument(path);
-  return extractPdsData(markdown);
-}
+  const client = await getOpenAIClient();
+  const pipelineStart = performance.now();
+  const rounds: ExtractionRound[] = [];
 
-/** Stream extraction events from a document file path. */
-export async function* extractPdsFromFileEvents(
-  path: string,
-): AsyncGenerator<ExtractionPipelineEvent, ExtractionResult, void> {
-  "use server";
-  const markdown = await readDocument(path);
-  return yield* extractPdsDataEvents(markdown);
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+    { role: "user", content: markdown },
+  ];
+
+  let result = await extractAndValidate(
+    client, messages, markdown, 0, "initial_extraction", null,
+  );
+  rounds.push(result.round);
+
+  for (let i = 1; i <= MAX_REFLECTION_ROUNDS && !result.round.passed; i++) {
+    result = await extractAndValidate(
+      client, messages, markdown, i, "reflection", result.round.validationFeedback,
+    );
+    rounds.push(result.round);
+  }
+
+  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
 }
 
 // ── Pipeline steps ──────────────────────────────────────────────
 
-/** Append the previous answer + validator feedback to the conversation, then re-extract. */
-async function reflectAndValidate(
-  client: OpenAI,
-  messages: OpenAI.ChatCompletionMessageParam[],
-  markdown: string,
-  previous: RoundOutput,
-  reflectionIndex: number,
-): Promise<RoundOutput> {
-  messages.push(
-    { role: "assistant", content: previous.messageContent },
-    { role: "user", content: `${REFLECTION_PROMPT}\n\n${previous.round.validationFeedback}` },
-  );
-
-  return extractAndValidate(
-    client, messages, markdown,
-    reflectionIndex, "reflection", previous.round.validationFeedback,
-  );
+interface RoundOutput {
+  round: ExtractionRound;
+  parsed: PdsData;
+  messageContent: string;
 }
 
 /** Call the LLM for structured extraction, then validate the result against source markdown. */
@@ -201,6 +232,17 @@ async function extractAndValidate(
   }
 
   const feedback = validateExtraction(parsed, markdown);
+
+  // Append the assistant's response to the conversation for potential future reflection
+  messages.push({ role: "assistant", content: message.content ?? "" });
+
+  // If validation failed, append the reflection prompt so the next call can continue
+  if (feedback) {
+    messages.push({
+      role: "user",
+      content: `${REFLECTION_PROMPT}\n\n${feedback}`,
+    });
+  }
 
   return {
     round: {

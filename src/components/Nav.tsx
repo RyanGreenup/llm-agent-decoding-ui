@@ -76,6 +76,12 @@ export function SidebarNav() {
         </A>
       </li>
       <li>
+        <A href="/rag-chat" class={active("/rag-chat")}>
+          <MessageSquare class="h-4 w-4" />
+          Upload Chat
+        </A>
+      </li>
+      <li>
         <A href="/document" class={active("/document")}>
           <FileDown class="h-4 w-4" />
           Convert

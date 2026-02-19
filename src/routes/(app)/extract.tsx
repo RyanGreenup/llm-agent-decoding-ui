@@ -11,7 +11,11 @@ import { animateMini } from "motion";
 import ExtractionTraceView from "~/components/ExtractionTraceView";
 import JsonViewer from "~/components/JsonViewer";
 import { createProtectedRoute, requireUser } from "~/lib/auth";
-import type { ExtractStreamWireEvent } from "~/lib/extraction/stream-types";
+import {
+  startExtraction,
+  continueExtraction,
+} from "~/lib/extraction/extract-pds";
+import { MAX_REFLECTION_ROUNDS } from "~/lib/config";
 import type { ExtractionTrace } from "~/lib/types";
 
 const requireAuthQuery = query(async () => {
@@ -28,49 +32,6 @@ function emptyTrace(model = "unknown"): ExtractionTrace {
     reflectionCount: 0,
     model,
   };
-}
-
-async function* parseNdjsonEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<ExtractStreamWireEvent> {
-  const textStream = (
-    body as ReadableStream<BufferSource>
-  ).pipeThrough(new TextDecoderStream());
-  const reader = textStream.getReader();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += value ?? "";
-      let lineBreakIndex = buffer.indexOf("\n");
-      while (lineBreakIndex >= 0) {
-        const line = buffer.slice(0, lineBreakIndex).trim();
-        buffer = buffer.slice(lineBreakIndex + 1);
-        lineBreakIndex = buffer.indexOf("\n");
-        if (!line) continue;
-
-        try {
-          yield JSON.parse(line) as ExtractStreamWireEvent;
-        } catch {
-          console.warn("Malformed NDJSON line:", line);
-        }
-      }
-    }
-
-    const finalLine = buffer.trim();
-    if (!finalLine) return;
-
-    try {
-      yield JSON.parse(finalLine) as ExtractStreamWireEvent;
-    } catch {
-      console.warn("Malformed final NDJSON line:", finalLine);
-    }
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 export const route = {
@@ -145,66 +106,64 @@ function ExtractionStreamView(props: {
     setData(undefined);
     animatedRounds.clear();
 
-    const abort = new AbortController();
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
 
-    const readStream = async () => {
-      const handleStreamEvent = (event: ExtractStreamWireEvent) => {
-        if (event.runId !== activeRunId) return;
-
-        switch (event.type) {
-          case "pipeline_started":
-            setTraceStatus("running");
-            props.onStatusChange?.("running");
-            break;
-          case "round_completed":
-            setTrace(reconcile(event.trace));
-            break;
-          case "pipeline_completed":
-            setPath(event.path);
-            setData(event.data);
-            setTrace(reconcile(event.trace));
-            setTraceStatus("complete");
-            props.onStatusChange?.("complete");
-            break;
-          case "pipeline_failed":
-            setTraceStatus("error");
-            setTraceError(event.error);
-            props.onStatusChange?.("error");
-            break;
-        }
-      };
-
+    const run = async () => {
       try {
-        const response = await fetch("/api/extract-stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ runId: activeRunId }),
-          signal: abort.signal,
-        });
+        // Round 0: initial extraction
+        const r0 = await startExtraction();
+        if (cancelled) return;
 
-        if (!response.ok) {
-          throw new Error(`Failed to start extraction stream (${response.status})`);
+        setTrace(reconcile(r0.trace));
+        setPath(r0.path);
+
+        let latestData = r0.data;
+
+        // Reflection loop — client drives it
+        let sessionId = r0.sessionId;
+        let latestRound = r0.round;
+        let reflectionCount = 0;
+
+        while (!latestRound.passed && reflectionCount < MAX_REFLECTION_ROUNDS) {
+          const rN = await continueExtraction(sessionId);
+          if (cancelled) return;
+
+          latestData = rN.data;
+
+          // Merge the new round into the cumulative trace
+          setTrace("rounds", (prev) => [...prev, rN.round]);
+          setTrace("totalUsage", "promptTokens", (p) =>
+            p + (rN.round.usage?.promptTokens ?? 0),
+          );
+          setTrace("totalUsage", "completionTokens", (p) =>
+            p + (rN.round.usage?.completionTokens ?? 0),
+          );
+          setTrace("totalUsage", "totalTokens", (p) =>
+            p + (rN.round.usage?.totalTokens ?? 0),
+          );
+          setTrace("reflectionCount", (c) => c + 1);
+          setTrace("finalPassed", rN.round.passed);
+
+          latestRound = rN.round;
+          reflectionCount++;
         }
 
-        if (!response.body) {
-          throw new Error("Extraction stream did not return a body");
-        }
+        setData(latestData);
 
-        for await (const streamEvent of parseNdjsonEvents(response.body)) {
-          // AbortController cancels prior runs; keep runId filtering as a
-          // defensive guard against any late buffered chunks.
-          handleStreamEvent(streamEvent);
-        }
+        setTraceStatus("complete");
+        props.onStatusChange?.("complete");
       } catch (error) {
-        if (abort.signal.aborted) return;
+        if (cancelled) return;
         setTraceStatus("error");
         setTraceError(error instanceof Error ? error.message : String(error));
         props.onStatusChange?.("error");
       }
     };
 
-    void readStream();
-    onCleanup(() => abort.abort());
+    void run();
   });
 
   const handleRoundElement = (el: HTMLDivElement, roundNumber: number) => {

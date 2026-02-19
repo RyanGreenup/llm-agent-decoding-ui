@@ -1,25 +1,35 @@
-import { A } from "@solidjs/router";
-import Counter from "~/components/Counter";
+import { createAsync, type RouteDefinition } from "@solidjs/router";
+import { Suspense } from "solid-js";
+import Hero from "~/components/Hero";
+import Table, { type Column } from "~/components/Table";
+import { getModels, type Model } from "~/lib/models";
+
+export const route = {
+  preload: () => {
+    getModels();
+  },
+} satisfies RouteDefinition;
+
+const columns: Column<Model>[] = [
+  { header: "Name", accessor: (row) => row.name },
+  { header: "Provider", accessor: (row) => row.provider },
+  { header: "Context Window", accessor: (row) => row.contextWindow.toLocaleString() },
+  { header: "Input ($/M tokens)", accessor: (row) => `$${row.inputPrice.toFixed(2)}` },
+  { header: "Output ($/M tokens)", accessor: (row) => `$${row.outputPrice.toFixed(2)}` },
+];
 
 export default function Home() {
+  const models = createAsync(() => getModels());
+
   return (
-    <main class="text-center mx-auto text-gray-700 p-4">
-      <h1 class="max-6-xs text-6xl text-sky-700 font-thin uppercase my-16">Hello world!</h1>
-      <Counter />
-      <p class="mt-8">
-        Visit{" "}
-        <a href="https://solidjs.com" target="_blank" class="text-sky-600 hover:underline">
-          solidjs.com
-        </a>{" "}
-        to learn how to build Solid apps.
-      </p>
-      <p class="my-4">
-        <span>Home</span>
-        {" - "}
-        <A href="/about" class="text-sky-600 hover:underline">
-          About Page
-        </A>{" "}
-      </p>
+    <main>
+      <Hero title="LLM Agent" subtitle="A simple interface for interacting with large language models." />
+      <div class="mx-auto max-w-4xl px-4 py-8">
+        <h2 class="text-2xl font-bold mb-4">Available Models</h2>
+        <Suspense fallback={<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg" /></div>}>
+          <Table columns={columns} rows={models() ?? []} zebra />
+        </Suspense>
+      </div>
     </main>
   );
 }

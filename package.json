@@ -10,8 +10,13 @@
   "dependencies": {
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",
+    "@types/node": "^25.3.0",
     "daisyui": "^5.5.18",
+    "file-type": "^21.3.0",
     "lucide-solid": "^0.574.0",
+    "markitdown": "^0.0.4",
+    "markitdown-ts": "^0.0.10",
+    "prettier": "^3.8.1",
     "solid-js": "^1.9.5",
     "vinxi": "^0.5.7"
   },

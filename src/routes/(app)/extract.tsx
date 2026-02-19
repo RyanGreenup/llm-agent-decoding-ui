@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 import { useSubmission, type RouteDefinition } from "@solidjs/router";
 import Card from "~/components/Card";
 import JsonViewer from "~/components/JsonViewer";
+import ExtractionTraceView from "~/components/ExtractionTraceView";
 import { extractPds } from "~/lib/extraction/queries";
 import { createProtectedRoute, getUser } from "~/lib/auth";
 
@@ -45,6 +46,7 @@ export default function Extract() {
             class="max-h-[70vh] overflow-auto rounded-lg"
           />
         </Card>
+        <ExtractionTraceView trace={submission.result!.trace} />
       </Show>
     </main>
   );

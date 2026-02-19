@@ -82,7 +82,8 @@ async function executeTool(
     case "extract_pds_data": {
       let data = _pdsCache.get(documentPath);
       if (!data) {
-        data = await extractPdsData(documentText);
+        const result = await extractPdsData(documentText);
+        data = result.data;
         _pdsCache.set(documentPath, data);
       }
       return JSON.stringify(data);

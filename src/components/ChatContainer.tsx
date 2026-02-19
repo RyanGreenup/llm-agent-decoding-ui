@@ -17,7 +17,7 @@ interface ChatContainerProps {
 
 export default function ChatContainer(props: ChatContainerProps) {
   return (
-    <div class="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
+    <div class="p-6 space-y-4">
       <For each={props.messages()}>
         {(message) => (
           <div

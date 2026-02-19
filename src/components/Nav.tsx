@@ -3,6 +3,7 @@ import { Show } from "solid-js";
 import FileText from "lucide-solid/icons/file-text";
 import MessageSquare from "lucide-solid/icons/message-square";
 import FileDown from "lucide-solid/icons/file-down";
+import BrainCircuit from "lucide-solid/icons/brain-circuit";
 import Info from "lucide-solid/icons/info";
 import LogOut from "lucide-solid/icons/log-out";
 import User from "lucide-solid/icons/user";
@@ -78,6 +79,12 @@ export function SidebarNav() {
         <A href="/document" class={active("/document")}>
           <FileDown class="h-4 w-4" />
           Convert
+        </A>
+      </li>
+      <li>
+        <A href="/extract" class={active("/extract")}>
+          <BrainCircuit class="h-4 w-4" />
+          Extract
         </A>
       </li>
       <li>

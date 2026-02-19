@@ -68,17 +68,16 @@ export default function Chat() {
   };
 
   return (
-    <>
-      {/* Chat Container */}
-      <ChatContainer
-        messages={messages}
-        isTyping={isTyping}
-        suggestedQuestions={suggestedQuestions}
-        onAskSuggested={askSuggested}
-      />
-
-      {/* Input Area */}
+    <div class="flex flex-col min-h-full">
+      <div class="flex-1 overflow-y-auto">
+        <ChatContainer
+          messages={messages}
+          isTyping={isTyping}
+          suggestedQuestions={suggestedQuestions}
+          onAskSuggested={askSuggested}
+        />
+      </div>
       <ChatInput value={input} onInput={setInput} onSend={sendMessage} />
-    </>
+    </div>
   );
 }

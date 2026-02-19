@@ -149,3 +149,47 @@ export async function stuffedChat(
   const content = await runner.finalContent();
   return content ?? "";
 }
+
+export async function stuffedChatStream(
+  question: string,
+  documentPath: string,
+  history: ChatMessage[],
+  onDelta: (delta: string) => void,
+  model?: string,
+): Promise<string> {
+  "use server";
+  const client = getClient();
+  const text = await readDocument(documentPath);
+
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: BASE_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `<document>\n${text}\n</document>`,
+    },
+    ...history.map(
+      (m): OpenAI.ChatCompletionMessageParam => ({
+        role: m.role,
+        content: m.content,
+      }),
+    ),
+    { role: "user", content: question },
+  ];
+
+  const runner = client.chat.completions.runTools(
+    {
+      model: model || DEFAULT_MODEL_ID,
+      stream: true,
+      messages,
+      tools: buildTools(text, documentPath),
+    },
+    { maxChatCompletions: MAX_TOOL_ROUNDS },
+  );
+
+  runner.on("content", (delta) => {
+    if (delta) onDelta(delta);
+  });
+
+  const content = await runner.finalContent();
+  return content ?? "";
+}

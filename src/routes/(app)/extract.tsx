@@ -1,6 +1,7 @@
 import { Show } from "solid-js";
 import { useSubmission, type RouteDefinition } from "@solidjs/router";
 import Card from "~/components/Card";
+import JsonViewer from "~/components/JsonViewer";
 import { extractPds } from "~/lib/extraction/queries";
 import { createProtectedRoute, getUser } from "~/lib/auth";
 
@@ -39,9 +40,10 @@ export default function Extract() {
       </Show>
       <Show when={submission.result}>
         <Card title={submission.result!.path}>
-          <pre class="bg-base-200 p-4 rounded-lg overflow-auto max-h-[70vh] text-sm">
-            {JSON.stringify(submission.result!.data, null, 2)}
-          </pre>
+          <JsonViewer
+            data={submission.result!.data}
+            class="max-h-[70vh] overflow-auto rounded-lg"
+          />
         </Card>
       </Show>
     </main>

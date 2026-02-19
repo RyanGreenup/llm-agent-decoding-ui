@@ -36,6 +36,7 @@
     "solid-motionone": "^1.0.4",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
+    "vanilla-jsoneditor": "^3.11.0",
     "vinxi": "^0.5.7"
   },
   "devDependencies": {

@@ -1,11 +1,20 @@
 import { getRawDocPath } from "~/lib/dataCleaning/convert_to_markdown";
-import { stuffedChatStream, type ChatMessage } from "~/lib/chat/stuffed-chat";
+import {
+  stuffedChatStreamWithTrace,
+  type ChatMessage,
+} from "~/lib/chat/stuffed-chat";
+import type { StuffedChatTraceEvent } from "~/lib/chat/stuffed-chat-auditing";
 
 type ChatStreamRequest = {
   question?: string;
   history?: ChatMessage[];
   model?: string;
 };
+
+type StreamEvent =
+  | { type: "delta"; delta: string }
+  | { type: "trace"; event: StuffedChatTraceEvent }
+  | { type: "error"; message: string };
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
@@ -40,19 +49,25 @@ export async function POST(event: any) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const writeEvent = (event: StreamEvent) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      };
       try {
-        await stuffedChatStream(
+        const result = await stuffedChatStreamWithTrace(
           question,
           documentPath,
           history,
-          (delta) => controller.enqueue(encoder.encode(delta)),
+          (delta) => writeEvent({ type: "delta", delta }),
+          (traceEvent) => writeEvent({ type: "trace", event: traceEvent }),
           model,
         );
+        console.info("RAG_CHAT_TRACE", JSON.stringify(result.trace));
       } catch (error) {
         console.error("chat stream failed:", error);
-        controller.enqueue(
-          encoder.encode("\n\nI hit an error while streaming the response."),
-        );
+        writeEvent({
+          type: "error",
+          message: "I hit an error while streaming the response.",
+        });
       } finally {
         controller.close();
       }
@@ -61,7 +76,7 @@ export async function POST(event: any) {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
     },
   });

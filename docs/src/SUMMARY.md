@@ -2,41 +2,26 @@
 
 # Introduction
 
-- [Index](./index.md)
+- [Overview](./index.md)
 
 ---
 
-# Docs
+# Developer Guide
 
-- [Placeholder 1]()
-- [Placeholder 2]()
-    - [Placeholder 2a]()
-    - [Placeholder 2b]()
-    - [Placeholder 2c]()
-- [Placeholder 3]()
-- [Placeholder 4]()
-
-
----
-
-# Some Heading
-
-- [Placeholder 1]()
-- [Placeholder 2]()
-    - [Placeholder 2a]()
-    - [Placeholder 2b]()
-    - [Placeholder 2c]()
-- [Placeholder 3]()
-- [Placeholder 4]()
+- [Getting Started](./getting-started.md)
+- [Architecture](./architecture.md)
+    - [Routing](./routing.md)
+    - [Server Functions](./server-functions.md)
+    - [State Management](./state-management.md)
+- [Components](./components.md)
+    - [Chat Components](./chat-components.md)
+    - [UI Components](./ui-components.md)
+- [Styling](./styling.md)
+- [Data Pipeline](./data-pipeline.md)
 
 ---
 
-# Another Heading
+# Reference
 
-- [Placeholder 1]()
-- [Placeholder 2]()
-    - [Placeholder 2a]()
-    - [Placeholder 2b]()
-    - [Placeholder 2c]()
-- [Placeholder 3]()
-- [Placeholder 4]()
+- [Conventions](./conventions.md)
+- [Deployment](./deployment.md)

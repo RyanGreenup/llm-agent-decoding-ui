@@ -66,5 +66,15 @@ export async function convert_to_markdown(
   return await prettier.format(markdown, { parser: "markdown" });
 }
 
+export async function get_raw_doc_path(): Promise<string> {
+  "use server";
+  const raw = process.env.RAW_DOC_PATH;
+  if (!raw) {
+    throw new Error("RAW_DOC_PATH environment variable is not set");
+  }
+  return raw;
+}
+
 export const readDocument = read_document;
 export const convertToMarkdown = convert_to_markdown;
+export const getRawDocPath = get_raw_doc_path;

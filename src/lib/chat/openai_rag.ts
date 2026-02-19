@@ -35,8 +35,31 @@ export function should_chunk(
 
 function toChunkResult(value: Record<string, unknown>): ChunkResult | null {
   const text = value.text;
-  const distance = value._distance;
-  if (typeof text !== "string" || typeof distance !== "number") return null;
+  if (typeof text !== "string" || text.trim().length === 0) return null;
+
+  const distanceCandidates = [
+    value._distance,
+    value.distance,
+    value._score,
+    value.score,
+    value.relevance,
+    value.relevance_score,
+  ];
+  let distance: number | undefined;
+  for (const candidate of distanceCandidates) {
+    if (typeof candidate !== "number" || !Number.isFinite(candidate)) continue;
+    // Convert common similarity-like scores to a pseudo distance.
+    if (candidate >= 0 && candidate <= 1) {
+      distance = 1 - candidate;
+    } else {
+      distance = candidate;
+    }
+    break;
+  }
+  if (typeof distance !== "number" || !Number.isFinite(distance)) {
+    // Keep chunk usable even if backend omits ranking metadata.
+    distance = 0;
+  }
   return { text, _distance: distance };
 }
 
@@ -166,6 +189,9 @@ export async function rag_chat(
   const selected = select_chunks(question, chunkResults, {
     context_window: contextWindow,
   });
+  const selectedWithFallback = selected.length > 0
+    ? selected
+    : chunkResults.slice(0, Math.max(1, Math.min(top_k, chunkResults.length)));
 
   const messages: Message[] = [
     { role: "system", content: system_prompt },
@@ -174,7 +200,7 @@ export async function rag_chat(
       role: "user",
       content: _build_rag_prompt(
         question,
-        selected.map((r: ChunkResult) => r.text),
+        selectedWithFallback.map((r: ChunkResult) => r.text),
       ),
     },
   ];

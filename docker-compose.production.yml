@@ -1,3 +1,12 @@
+# TODO implement quadlets
+# TODO drop cap
+# TODO read only
+# TODO etc.
+
+
+
+
+
 services:
   app:
     build:

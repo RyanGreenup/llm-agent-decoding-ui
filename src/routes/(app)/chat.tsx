@@ -1,16 +1,24 @@
 import { type RouteDefinition } from "@solidjs/router";
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { createAsync } from "@solidjs/router";
+import { createEffect, createSignal, onCleanup, onMount, Suspense } from "solid-js";
+import { Portal } from "solid-js/web";
 import ChatContainer from "~/components/ChatContainer";
 import type { Message } from "~/lib/types";
 import ChatInput from "~/components/ChatInput";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { getModels } from "~/lib/models";
 import { createProtectedRoute, getUser } from "~/lib/auth";
+import { getConvertedDocument } from "~/lib/dataCleaning/queries";
+import DocumentPreviewPanel, {
+  DocumentPreviewLoading,
+} from "~/components/DocumentPreviewPanel";
+import X from "lucide-solid/icons/x";
 
 export const route = {
   preload: () => {
     getUser();
     getModels();
+    getConvertedDocument();
   },
 } satisfies RouteDefinition;
 
@@ -28,9 +36,11 @@ export default function Chat() {
   const [isTyping, setIsTyping] = createSignal(false);
   const [selectedModelId] = createSignal(DEFAULT_MODEL_ID);
   const [shouldAutoScroll, setShouldAutoScroll] = createSignal(true);
+  const doc = createAsync(() => getConvertedDocument());
   let scrollViewportRef: HTMLDivElement | undefined;
   let scrollContentRef: HTMLDivElement | undefined;
   let streamAnchorRef: HTMLDivElement | undefined;
+  let docPreviewDialogRef: HTMLDialogElement | undefined;
   const BOTTOM_THRESHOLD_PX = 96;
 
   const isNearBottom = (el: HTMLDivElement): boolean =>
@@ -216,8 +226,18 @@ export default function Chat() {
     void sendMessage(question);
   };
 
+  const openDocumentPreview = () => {
+    if (!docPreviewDialogRef || docPreviewDialogRef.open) return;
+    docPreviewDialogRef.showModal();
+  };
+
   return (
     <div class="flex flex-col min-h-full">
+      <div class="flex items-center justify-end border-b border-base-300 px-4 py-3 sm:px-6">
+        <button type="button" class="btn btn-sm btn-outline" onClick={openDocumentPreview}>
+          Preview Document
+        </button>
+      </div>
       <div class="flex-1 overflow-y-auto" ref={scrollViewportRef}>
         <div ref={scrollContentRef} class="pb-24">
           <ChatContainer
@@ -235,6 +255,41 @@ export default function Chat() {
         onSend={() => void sendMessage()}
         disableSend={isTyping}
       />
+      <Portal>
+        <dialog ref={docPreviewDialogRef} class="modal modal-bottom sm:modal-middle">
+          <div class="modal-box w-11/12 max-w-5xl p-0">
+            <div class="flex items-center justify-between border-b border-base-300 px-5 py-4">
+              <h2 class="text-lg font-semibold">Document Preview</h2>
+              <form method="dialog">
+                <button type="submit" class="btn btn-circle btn-ghost btn-sm" aria-label="Close">
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </form>
+            </div>
+            <div class="max-h-[75vh] overflow-y-auto px-5 py-4">
+              <Suspense
+                fallback={
+                  <DocumentPreviewLoading
+                    message="Loading document preview..."
+                    spinnerClass="loading-md"
+                  />
+                }
+              >
+                <DocumentPreviewPanel
+                  path={doc()?.path}
+                  markdown={doc()?.markdown ?? ""}
+                  markdownClass="max-h-[60vh]"
+                />
+              </Suspense>
+            </div>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button type="submit" aria-label="Close document preview">
+              close
+            </button>
+          </form>
+        </dialog>
+      </Portal>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { Suspense, createSignal } from "solid-js";
 import { createAsync, useSubmission, type RouteDefinition } from "@solidjs/router";
-import Card from "~/components/Card";
-import MarkdownPreview from "~/components/MarkdownPreview";
+import DocumentPreviewPanel, {
+  DocumentPreviewLoading,
+} from "~/components/DocumentPreviewPanel";
 import {
   downloadDocument,
   getConvertedDocument,
@@ -96,20 +97,9 @@ export default function Document() {
         </div>
       )}
       <Suspense
-        fallback={
-          <div class="flex items-center gap-3 py-12 justify-center">
-            <span class="loading loading-spinner loading-lg" />
-            <span>Converting document…</span>
-          </div>
-        }
+        fallback={<DocumentPreviewLoading message="Converting document..." />}
       >
-        <Card title={doc()?.path}>
-          <MarkdownPreview
-            markdown={doc()?.markdown ?? ""}
-            class="bg-base-200 p-4 rounded-lg overflow-auto max-h-[70vh] text-sm"
-            fallback={<span class="loading loading-spinner loading-sm" />}
-          />
-        </Card>
+        <DocumentPreviewPanel path={doc()?.path} markdown={doc()?.markdown ?? ""} />
       </Suspense>
     </main>
   );

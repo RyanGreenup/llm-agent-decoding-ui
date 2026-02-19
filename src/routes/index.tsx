@@ -1,6 +1,7 @@
 import { createAsync, type RouteDefinition } from "@solidjs/router";
 import { createSignal } from "solid-js";
 import ChatContainer, { type Message } from "~/components/ChatContainer";
+import ChatInput from "~/components/ChatInput";
 import ChatNavbar from "~/components/ChatNavbar";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { getModels } from "~/lib/models";
@@ -84,34 +85,7 @@ export default function Home() {
       />
 
       {/* Input Area */}
-      <div class="fixed bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 p-4">
-        <div class="max-w-3xl mx-auto flex gap-3">
-          <input
-            type="text"
-            placeholder="Ask about the PDS..."
-            class="input input-bordered flex-1 focus:input-primary"
-            value={input()}
-            onInput={(e) => setInput(e.currentTarget.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          />
-          <button class="btn btn-primary" onClick={sendMessage}>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <ChatInput value={input} onInput={setInput} onSend={sendMessage} />
     </div>
   );
 }

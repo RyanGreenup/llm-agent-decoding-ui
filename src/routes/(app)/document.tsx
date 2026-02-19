@@ -1,8 +1,12 @@
-import { Suspense } from "solid-js";
+import { Suspense, createSignal } from "solid-js";
 import { createAsync, useSubmission, type RouteDefinition } from "@solidjs/router";
 import Card from "~/components/Card";
 import MarkdownPreview from "~/components/MarkdownPreview";
-import { getConvertedDocument, reconvertDocument } from "~/lib/dataCleaning/queries";
+import {
+  downloadDocument,
+  getConvertedDocument,
+  reconvertDocument,
+} from "~/lib/dataCleaning/queries";
 import { createProtectedRoute, getUser } from "~/lib/auth";
 
 export const route = {
@@ -16,21 +20,79 @@ export default function Document() {
   createProtectedRoute();
   const doc = createAsync(() => getConvertedDocument());
   const submission = useSubmission(reconvertDocument);
+  const [downloadPending, setDownloadPending] = createSignal<"docx" | "markdown" | null>(
+    null,
+  );
+  const [downloadError, setDownloadError] = createSignal<string | null>(null);
+
+  function base64ToBlob(base64: string, mimeType: string): Blob {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    return new Blob([bytes], { type: mimeType });
+  }
+
+  function triggerFileDownload(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleDownload(format: "docx" | "markdown") {
+    setDownloadError(null);
+    setDownloadPending(format);
+    try {
+      const file = await downloadDocument(format);
+      const blob = base64ToBlob(file.dataBase64, file.mimeType);
+      triggerFileDownload(blob, file.filename);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDownloadPending(null);
+    }
+  }
 
   return (
     <main class="mx-auto max-w-4xl px-4 py-12 space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-3xl font-bold">Document Preview</h1>
-        <form action={reconvertDocument} method="post">
+        <div class="flex items-center gap-2">
           <button
-            type="submit"
-            class="btn btn-primary"
-            disabled={submission.pending}
+            type="button"
+            class="btn btn-outline"
+            disabled={downloadPending() !== null}
+            onClick={() => void handleDownload("docx")}
           >
-            {submission.pending ? "Converting..." : "Re-convert"}
+            {downloadPending() === "docx" ? "Downloading DOCX..." : "Download DOCX"}
           </button>
-        </form>
+          <button
+            type="button"
+            class="btn btn-outline"
+            disabled={downloadPending() !== null}
+            onClick={() => void handleDownload("markdown")}
+          >
+            {downloadPending() === "markdown" ? "Downloading Markdown..." : "Download Markdown"}
+          </button>
+          <form action={reconvertDocument} method="post">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              disabled={submission.pending}
+            >
+              {submission.pending ? "Converting..." : "Re-convert"}
+            </button>
+          </form>
+        </div>
       </div>
+      {downloadError() && (
+        <div class="alert alert-error">
+          <span>{downloadError()}</span>
+        </div>
+      )}
       <Suspense
         fallback={
           <div class="flex items-center gap-3 py-12 justify-center">

@@ -58,29 +58,31 @@ export default function Document() {
 
   return (
     <main class="mx-auto max-w-4xl px-4 py-12 space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-4">
         <h1 class="text-3xl font-bold">Document Preview</h1>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="btn btn-outline"
-            disabled={downloadPending() !== null}
-            onClick={() => void handleDownload("docx")}
-          >
-            {downloadPending() === "docx" ? "Downloading DOCX..." : "Download DOCX"}
-          </button>
-          <button
-            type="button"
-            class="btn btn-outline"
-            disabled={downloadPending() !== null}
-            onClick={() => void handleDownload("markdown")}
-          >
-            {downloadPending() === "markdown" ? "Downloading Markdown..." : "Download Markdown"}
-          </button>
-          <form action={reconvertDocument} method="post">
+        <div class="w-full flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div class="join join-vertical w-full lg:w-auto lg:join-horizontal">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm sm:btn-md join-item w-full lg:w-auto"
+              disabled={downloadPending() !== null}
+              onClick={() => void handleDownload("docx")}
+            >
+              {downloadPending() === "docx" ? "Downloading DOCX..." : "Download DOCX"}
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline btn-sm sm:btn-md join-item w-full lg:w-auto"
+              disabled={downloadPending() !== null}
+              onClick={() => void handleDownload("markdown")}
+            >
+              {downloadPending() === "markdown" ? "Downloading Markdown..." : "Download Markdown"}
+            </button>
+          </div>
+          <form class="w-full lg:w-auto" action={reconvertDocument} method="post">
             <button
               type="submit"
-              class="btn btn-primary"
+              class="btn btn-primary btn-sm sm:btn-md btn-block lg:w-auto"
               disabled={submission.pending}
             >
               {submission.pending ? "Converting..." : "Re-convert"}

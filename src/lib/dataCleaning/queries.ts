@@ -1,6 +1,6 @@
 "use server";
 
-import { query } from "@solidjs/router";
+import { action, query } from "@solidjs/router";
 import {
   getRawDocPath,
   convertToMarkdownPandoc,
@@ -12,3 +12,8 @@ export const getConvertedDocument = query(async () => {
   const markdown = await convertToMarkdownPandoc(path);
   return { path, markdown };
 }, "convertedDocument");
+
+export const reconvertDocument = action(async () => {
+  "use server";
+  // Action completion triggers automatic revalidation of route queries
+}, "reconvertDocument");

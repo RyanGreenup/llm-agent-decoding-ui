@@ -1,8 +1,8 @@
 import { Suspense } from "solid-js";
-import { createAsync, type RouteDefinition } from "@solidjs/router";
+import { createAsync, useSubmission, type RouteDefinition } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import Card from "~/components/Card";
-import { getConvertedDocument } from "~/lib/dataCleaning/queries";
+import { getConvertedDocument, reconvertDocument } from "~/lib/dataCleaning/queries";
 
 const MarkdownPreview = clientOnly(() => import("~/components/MarkdownPreview"));
 
@@ -14,10 +14,22 @@ export const route = {
 
 export default function Document() {
   const doc = createAsync(() => getConvertedDocument());
+  const submission = useSubmission(reconvertDocument);
 
   return (
     <main class="mx-auto max-w-4xl px-4 py-12 space-y-6">
-      <h1 class="text-3xl font-bold">Document Preview</h1>
+      <div class="flex items-center justify-between">
+        <h1 class="text-3xl font-bold">Document Preview</h1>
+        <form action={reconvertDocument} method="post">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            disabled={submission.pending}
+          >
+            {submission.pending ? "Converting..." : "Re-convert"}
+          </button>
+        </form>
+      </div>
       <Suspense
         fallback={
           <div class="flex items-center gap-3 py-12 justify-center">

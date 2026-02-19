@@ -1,6 +1,7 @@
 import { createAsync, query, type RouteDefinition } from "@solidjs/router";
 import {
   ErrorBoundary,
+  For,
   Show,
   createEffect,
   createSignal,
@@ -8,7 +9,6 @@ import {
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { animateMini } from "motion";
-import ExtractionTraceView from "~/components/ExtractionTraceView";
 import JsonViewer from "~/components/JsonViewer";
 import { createProtectedRoute, requireUser } from "~/lib/auth";
 import {
@@ -16,95 +16,403 @@ import {
   continueExtraction,
 } from "~/lib/extraction/extract-pds";
 import { MAX_REFLECTION_ROUNDS } from "~/lib/config";
-import type { ExtractionTrace } from "~/lib/types";
+import type { ExtractionRound, ExtractionTrace } from "~/lib/types";
+
+// ── Auth ────────────────────────────────────────────────────────
 
 const requireAuthQuery = query(async () => {
   "use server";
   return requireUser();
-}, "extract-require-auth");
+}, "extract-new-require-auth");
 
-function emptyTrace(model = "unknown"): ExtractionTrace {
+export const route = {
+  preload: () => requireAuthQuery(),
+} satisfies RouteDefinition;
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+function emptyTrace(): ExtractionTrace {
   return {
     rounds: [],
     totalDurationMs: 0,
     totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     finalPassed: false,
     reflectionCount: 0,
-    model,
+    model: "unknown",
   };
 }
 
-export const route = {
-  preload: () => requireAuthQuery(),
-} satisfies RouteDefinition;
-
-function ExtractionErrorFallback() {
-  return <p class="text-error">Extraction failed.</p>;
+function fmtMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
-function TraceStatusBar(props: { status: string; roundsLoaded: number }) {
+function fmtTokens(n: number): string {
+  return n.toLocaleString();
+}
+
+type Status = "idle" | "running" | "complete" | "error";
+const COLLAPSE_TRACE_ON_COMPLETION = false;
+
+function roleConfig(role: ExtractionRound["role"]) {
+  switch (role) {
+    case "initial_extraction":
+      return { text: "Initial Extraction", badge: "badge-primary", step: "step-primary", border: "border-primary/30" };
+    case "reflection":
+      return { text: "Reflection", badge: "badge-secondary", step: "step-secondary", border: "border-secondary/30" };
+    case "critic":
+      return { text: "Critic", badge: "badge-accent", step: "step-accent", border: "border-accent/30" };
+    case "tool_call":
+      return { text: "Tool Call", badge: "badge-info", step: "step-info", border: "border-info/30" };
+    case "agent":
+      return { text: "Agent", badge: "badge-warning", step: "step-warning", border: "border-warning/30" };
+    default:
+      return { text: role, badge: "badge-ghost", step: "", border: "border-base-300" };
+  }
+}
+
+// ── Section label ───────────────────────────────────────────────
+
+function SectionLabel(props: { children: string; class?: string }) {
   return (
-    <div class="text-xs opacity-70">
-      Status: {props.status} · Rounds loaded: {props.roundsLoaded}
+    <p class={`text-[10px] font-bold uppercase tracking-widest opacity-40 mb-1.5 ${props.class ?? ""}`}>
+      {props.children}
+    </p>
+  );
+}
+
+function ExtractedDataSnapshot(props: { snapshot: ExtractionRound["snapshot"] }) {
+  return (
+    <Show when={props.snapshot}>
+      <details class="collapse collapse-arrow mb-4 bg-base-100 border border-base-300">
+        <summary class="collapse-title text-[10px] font-bold uppercase tracking-widest opacity-40">
+          Extracted data (structured output)
+        </summary>
+        <div class="collapse-content pt-0">
+          <div class="border border-base-300 rounded-lg overflow-hidden bg-base-100">
+            <JsonViewer
+              data={props.snapshot}
+              class="max-h-[50vh] overflow-auto"
+            />
+          </div>
+        </div>
+      </details>
+    </Show>
+  );
+}
+
+function TimelineDot(props: { passed: boolean }) {
+  return (
+    <div
+      class={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 ${
+        props.passed
+          ? "bg-success border-success"
+          : "bg-warning border-warning"
+      }`}
+    />
+  );
+}
+
+function RoundHeader(props: {
+  round: ExtractionRound;
+  config: ReturnType<typeof roleConfig>;
+}) {
+  return (
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <span class={`badge badge-sm font-semibold ${props.config.badge}`}>
+        {props.config.text}
+      </span>
+      <span class="font-mono text-xs opacity-40">Round {props.round.round}</span>
+      <span class="font-mono text-xs opacity-40">{props.round.model}</span>
+      <div class="ml-auto flex items-center gap-2">
+        <Show when={props.round.usage}>
+          <span class="text-xs tabular-nums opacity-50">
+            {fmtTokens(props.round.usage!.promptTokens)}p + {fmtTokens(props.round.usage!.completionTokens)}c = {fmtTokens(props.round.usage!.totalTokens)} tok
+          </span>
+        </Show>
+        <span class="text-xs tabular-nums opacity-50">{fmtMs(props.round.durationMs)}</span>
+        <span
+          class={`badge badge-xs ${props.round.passed ? "badge-success" : "badge-warning"}`}
+        >
+          {props.round.passed ? "PASS" : "FAIL"}
+        </span>
+      </div>
     </div>
   );
 }
 
-function RunningTraceNotice() {
+function ValidatorFeedbackInput(props: { input: ExtractionRound["input"] }) {
   return (
-    <div class="alert alert-info py-2 text-sm">
-      More trace updates are coming as extraction continues.
+    <Show when={props.input}>
+      <div class="mb-4">
+        <SectionLabel>Validator feedback sent to model</SectionLabel>
+        <div class="mockup-code bg-base-200 border border-base-300">
+          <pre class="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">
+            <code>{props.input}</code>
+          </pre>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function DeterministicValidationFeedback(props: {
+  validationFeedback: ExtractionRound["validationFeedback"];
+}) {
+  return (
+    <Show when={props.validationFeedback}>
+      <div class="mb-4">
+        <SectionLabel>Deterministic validation result</SectionLabel>
+        <div role="alert" class="alert alert-warning alert-soft">
+          <pre class="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">
+            {props.validationFeedback}
+          </pre>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function DeterministicValidationPassed(props: {
+  passed: ExtractionRound["passed"];
+  validationFeedback: ExtractionRound["validationFeedback"];
+}) {
+  return (
+    <Show when={props.passed && !props.validationFeedback}>
+      <div class="mb-4">
+        <SectionLabel>Deterministic validation result</SectionLabel>
+        <div role="alert" class="alert alert-success alert-soft">
+          <span class="text-xs font-semibold">All checks passed</span>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function RawModelOutput(props: { rawOutput: ExtractionRound["rawOutput"] }) {
+  return (
+    <Show when={props.rawOutput}>
+      <details class="collapse collapse-arrow mb-4 bg-base-100 border border-base-300">
+        <summary class="collapse-title text-[10px] font-bold uppercase tracking-widest opacity-40">
+          Raw model output{" "}
+          <span class="normal-case tracking-normal font-normal">
+            (click to expand)
+          </span>
+        </summary>
+        <div class="collapse-content pt-0">
+          <div class="mockup-code bg-base-200 border border-base-300">
+            <pre class="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">
+              <code>{props.rawOutput}</code>
+            </pre>
+          </div>
+        </div>
+      </details>
+    </Show>
+  );
+}
+
+function PipelineModelStat(props: { model: ExtractionTrace["model"] }) {
+  return (
+    <div class="stat p-0 min-h-0">
+      <div class="stat-title text-[10px] leading-none">Model</div>
+      <div class="font-mono text-xs mt-1">{props.model}</div>
     </div>
   );
 }
 
-function TraceErrorNotice(props: { error: string }) {
-  return <div class="alert alert-error">{props.error}</div>;
-}
+// ── Full round trace ────────────────────────────────────────────
 
-function ExtractedDataPanel(props: { data: unknown; path: string }) {
+function RoundTrace(props: {
+  round: ExtractionRound;
+  isLast: boolean;
+  onElement?: (el: HTMLDivElement) => void;
+}) {
+  const cfg = () => roleConfig(props.round.role);
+
   return (
-    <div class="space-y-2">
-      <h2 class="text-sm font-semibold opacity-80">Extracted Data</h2>
-      <JsonViewer
-        data={props.data}
-        class="max-h-[70vh] overflow-auto rounded-lg"
+    <div
+      ref={(el) => props.onElement?.(el)}
+      class={`relative border-l-2 ${cfg().border} pl-5 pb-6 ml-3`}
+    >
+      {/* Timeline dot */}
+      <TimelineDot passed={props.round.passed} />
+
+      {/* Round header */}
+      <RoundHeader round={props.round} config={cfg()} />
+
+      {/* ① Input: what the model was given (validator feedback from previous round) */}
+      <ValidatorFeedbackInput input={props.round.input} />
+
+      {/* ② Extracted data snapshot */}
+      <ExtractedDataSnapshot snapshot={props.round.snapshot} />
+
+      {/* ③ Deterministic validation result */}
+      <DeterministicValidationFeedback
+        validationFeedback={props.round.validationFeedback}
       />
-      <p class="text-xs opacity-60 break-all">Source: {props.path}</p>
+
+      <DeterministicValidationPassed
+        passed={props.round.passed}
+        validationFeedback={props.round.validationFeedback}
+      />
+
+      {/* ④ Raw model output (the actual text returned by the LLM) */}
+      <RawModelOutput rawOutput={props.round.rawOutput} />
     </div>
   );
 }
 
-function WaitingForTraceFallback() {
-  return <p class="text-sm opacity-70">Waiting for first trace chunk...</p>;
+// ── Pipeline summary bar ────────────────────────────────────────
+
+function PipelineSummary(props: { trace: ExtractionTrace; status: Status }) {
+  return (
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 bg-base-200/60 rounded-lg text-xs">
+      <PipelineModelStat model={props.trace.model} />
+      <div>
+        <span class="opacity-40 font-semibold uppercase tracking-wide">Rounds</span>{" "}
+        <span class="font-mono tabular-nums">{props.trace.rounds.length}</span>
+      </div>
+      <Show when={props.trace.reflectionCount > 0}>
+        <div>
+          <span class="opacity-40 font-semibold uppercase tracking-wide">Reflections</span>{" "}
+          <span class="font-mono tabular-nums">{props.trace.reflectionCount}</span>
+        </div>
+      </Show>
+      <div>
+        <span class="opacity-40 font-semibold uppercase tracking-wide">Tokens</span>{" "}
+        <span class="font-mono tabular-nums">
+          {fmtTokens(props.trace.totalUsage.promptTokens)}p + {fmtTokens(props.trace.totalUsage.completionTokens)}c = {fmtTokens(props.trace.totalUsage.totalTokens)}
+        </span>
+      </div>
+      <div>
+        <span class="opacity-40 font-semibold uppercase tracking-wide">Duration</span>{" "}
+        <span class="font-mono tabular-nums">{fmtMs(props.trace.totalDurationMs)}</span>
+      </div>
+      <div class="ml-auto">
+        <Show
+          when={props.status !== "running"}
+          fallback={
+            <span class="badge badge-sm badge-ghost gap-1">
+              <span class="loading loading-dots loading-xs" />
+              Running
+            </span>
+          }
+        >
+          <span
+            class={`badge badge-sm ${
+              props.trace.finalPassed
+                ? "badge-success"
+                : props.trace.rounds.length > 0
+                  ? "badge-warning"
+                  : "badge-ghost"
+            }`}
+          >
+            {props.trace.finalPassed ? "Passed" : props.trace.rounds.length > 0 ? "Failed" : "--"}
+          </span>
+        </Show>
+      </div>
+    </div>
+  );
 }
 
-function ExtractionStreamView(props: {
+// ── JSON skeleton ───────────────────────────────────────────────
+
+function JsonSkeleton() {
+  return (
+    <div class="space-y-3 p-4">
+      <div class="flex items-center gap-2">
+        <div class="skeleton h-4 w-4 rounded" />
+        <div class="skeleton h-4 w-24" />
+      </div>
+      <div class="pl-6 space-y-2">
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-32" />
+          <div class="skeleton h-3 w-20" />
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-28" />
+          <div class="skeleton h-3 w-16" />
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-36" />
+          <div class="skeleton h-3 w-12" />
+        </div>
+        <div class="pl-6 space-y-2">
+          <div class="flex items-center gap-2">
+            <div class="skeleton h-3 w-3 rounded" />
+            <div class="skeleton h-3 w-24" />
+            <div class="skeleton h-3 w-20" />
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="skeleton h-3 w-3 rounded" />
+            <div class="skeleton h-3 w-30" />
+            <div class="skeleton h-3 w-14" />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-20" />
+          <div class="skeleton h-3 w-24" />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="skeleton h-4 w-4 rounded" />
+        <div class="skeleton h-4 w-28" />
+      </div>
+      <div class="pl-6 space-y-2">
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-24" />
+          <div class="skeleton h-3 w-16" />
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="skeleton h-3 w-3 rounded" />
+          <div class="skeleton h-3 w-32" />
+          <div class="skeleton h-3 w-10" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Extraction runner ───────────────────────────────────────────
+
+function ExtractionView(props: {
   runId: number;
-  onStatusChange?: (
-    status: "idle" | "running" | "complete" | "error",
-  ) => void;
+  onStatusChange?: (status: Status) => void;
 }) {
   const [trace, setTrace] = createStore<ExtractionTrace>(emptyTrace());
-  const [traceStatus, setTraceStatus] = createSignal<
-    "idle" | "running" | "complete" | "error"
-  >("idle");
-  const [traceError, setTraceError] = createSignal<string | undefined>(undefined);
-  const [path, setPath] = createSignal<string | undefined>(undefined);
-  const [data, setData] = createSignal<unknown | undefined>(undefined);
+  const [status, setStatus] = createSignal<Status>("idle");
+  const [error, setError] = createSignal<string>();
+  const [path, setPath] = createSignal<string>();
+  const [data, setData] = createSignal<unknown>();
   const animatedRounds = new Set<number>();
+
+  let detailsRef!: HTMLDetailsElement;
+
+  // Optionally collapse trace when extraction completes.
+  createEffect(() => {
+    if (COLLAPSE_TRACE_ON_COMPLETION && data() && detailsRef) {
+      setTimeout(() => {
+        detailsRef.open = false;
+      }, 800);
+    }
+  });
 
   createEffect(() => {
     const activeRunId = props.runId;
     if (activeRunId <= 0) return;
 
     setTrace(reconcile(emptyTrace()));
-    setTraceStatus("running");
+    setStatus("running");
     props.onStatusChange?.("running");
-    setTraceError(undefined);
+    setError(undefined);
     setPath(undefined);
     setData(undefined);
     animatedRounds.clear();
+    if (detailsRef) detailsRef.open = true;
 
     let cancelled = false;
     onCleanup(() => {
@@ -113,7 +421,6 @@ function ExtractionStreamView(props: {
 
     const run = async () => {
       try {
-        // Round 0: initial extraction
         const r0 = await startExtraction();
         if (cancelled) return;
 
@@ -121,19 +428,16 @@ function ExtractionStreamView(props: {
         setPath(r0.path);
 
         let latestData = r0.data;
-
-        // Reflection loop — client drives it
         let sessionId = r0.sessionId;
         let latestRound = r0.round;
-        let reflectionCount = 0;
+        let reflections = 0;
 
-        while (!latestRound.passed && reflectionCount < MAX_REFLECTION_ROUNDS) {
+        while (!latestRound.passed && reflections < MAX_REFLECTION_ROUNDS) {
           const rN = await continueExtraction(sessionId);
           if (cancelled) return;
 
           latestData = rN.data;
 
-          // Merge the new round into the cumulative trace
           setTrace("rounds", (prev) => [...prev, rN.round]);
           setTrace("totalUsage", "promptTokens", (p) =>
             p + (rN.round.usage?.promptTokens ?? 0),
@@ -148,17 +452,16 @@ function ExtractionStreamView(props: {
           setTrace("finalPassed", rN.round.passed);
 
           latestRound = rN.round;
-          reflectionCount++;
+          reflections++;
         }
 
         setData(latestData);
-
-        setTraceStatus("complete");
+        setStatus("complete");
         props.onStatusChange?.("complete");
-      } catch (error) {
+      } catch (err) {
         if (cancelled) return;
-        setTraceStatus("error");
-        setTraceError(error instanceof Error ? error.message : String(error));
+        setStatus("error");
+        setError(err instanceof Error ? err.message : String(err));
         props.onStatusChange?.("error");
       }
     };
@@ -166,91 +469,229 @@ function ExtractionStreamView(props: {
     void run();
   });
 
-  const handleRoundElement = (el: HTMLDivElement, roundNumber: number) => {
+  const animateIn = (el: HTMLDivElement, roundNumber: number) => {
     if (animatedRounds.has(roundNumber)) return;
     animatedRounds.add(roundNumber);
+    // TODO: animateMini's opacity: [0, 1] leaves elements invisible when
+    // the animation fails to complete (e.g. element inside a <details> that
+    // hasn't painted yet). Use transform-only and force opacity to 1 so
+    // rounds are always visible regardless of animation state.
+    el.style.opacity = "1";
     animateMini(
       el,
-      {
-        opacity: [0, 1],
-        transform: ["translateY(10px)", "translateY(0px)"],
-      },
-      { duration: 0.28, ease: "easeOut" },
+      { transform: ["translateY(16px)", "translateY(0px)"] },
+      { duration: 0.35, ease: "easeOut" },
     );
   };
 
   return (
-    <ErrorBoundary fallback={<ExtractionErrorFallback />}>
-      <div class="space-y-4">
-        <TraceStatusBar status={traceStatus()} roundsLoaded={trace.rounds.length} />
+    <div class="flex flex-col xl:flex-row gap-6 items-start">
+      {/* ── Left: trace timeline ── */}
+      <div class="w-full xl:flex-1 xl:min-w-0">
+        <details
+          ref={detailsRef}
+          class="collapse collapse-arrow bg-base-100 border border-base-300"
+          open
+        >
+          <summary class="collapse-title text-base font-semibold flex items-center gap-2">
+            Extraction Trace
+            <div class="ml-auto flex items-center gap-2">
+              <Show when={status() === "running"}>
+                <span class="loading loading-dots loading-xs opacity-50" />
+              </Show>
+              <Show when={trace.rounds.length > 0}>
+                <span class="badge badge-sm badge-ghost tabular-nums">
+                  {trace.rounds.length} round{trace.rounds.length !== 1 ? "s" : ""}
+                </span>
+              </Show>
+            </div>
+          </summary>
+          <div class="collapse-content pt-0">
 
-        <Show when={traceStatus() === "running" && trace.rounds.length > 0}>
-          <RunningTraceNotice />
-        </Show>
+            {/* Summary bar */}
+            <Show when={trace.rounds.length > 0}>
+              <div class="mb-5">
+                <PipelineSummary trace={trace} status={status()} />
+              </div>
+            </Show>
 
-        <Show when={traceError()}>
-          {(error) => <TraceErrorNotice error={error()} />}
-        </Show>
+            {/* Timeline */}
+            <Show
+              when={trace.rounds.length > 0}
+              fallback={
+                <div class="flex flex-col items-center gap-3 py-12 opacity-40">
+                  <span class="loading loading-spinner loading-lg" />
+                  <p class="text-sm">Running initial extraction...</p>
+                </div>
+              }
+            >
+              <div>
+                <For each={trace.rounds}>
+                  {(round, i) => (
+                    <RoundTrace
+                      round={round}
+                      isLast={i() === trace.rounds.length - 1 && status() !== "running"}
+                      onElement={(el) => animateIn(el, round.round)}
+                    />
+                  )}
+                </For>
 
-        <Show when={data()}>
-          {(extractedData) => (
+                {/* Pending next round indicator */}
+                <Show when={status() === "running" && !trace.finalPassed}>
+                  <div class="relative border-l-2 border-dashed border-base-300 pl-5 pb-4 ml-3">
+                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-base-300 bg-base-100 flex items-center justify-center">
+                      <span class="loading loading-spinner loading-xs" />
+                    </div>
+                    <p class="text-sm opacity-40 pt-0.5">Running reflection round...</p>
+                  </div>
+                </Show>
+              </div>
+            </Show>
+          </div>
+        </details>
+      </div>
+
+      {/* ── Right: final JSON result ── */}
+      <div class="w-full xl:w-[420px] xl:shrink-0">
+        <div class="xl:sticky xl:top-4">
+          <div class="flex items-center gap-2 py-2 mb-4">
+            <h2 class="text-base font-semibold">Final Result</h2>
             <Show when={path()}>
-              {(sourcePath) => (
-                <ExtractedDataPanel
+              <span class="text-xs opacity-30 truncate ml-auto max-w-[60%]" title={path()}>
+                {path()}
+              </span>
+            </Show>
+          </div>
+
+          <div class="border border-base-300 rounded-lg bg-base-100 overflow-hidden min-h-[200px]">
+            <Show
+              when={data()}
+              fallback={
+                <Show
+                  when={status() !== "idle"}
+                  fallback={
+                    <div class="flex items-center justify-center h-48 opacity-25 text-sm">
+                      Run an extraction to see results
+                    </div>
+                  }
+                >
+                  <div class="relative">
+                    <div class="absolute top-3 right-3 z-10">
+                      <span class="badge badge-sm badge-ghost gap-1.5">
+                        <span class="loading loading-dots loading-xs" />
+                        Processing
+                      </span>
+                    </div>
+                    <JsonSkeleton />
+                  </div>
+                </Show>
+              }
+            >
+              {(extractedData) => (
+                <JsonViewer
                   data={extractedData()}
-                  path={sourcePath()}
+                  class="max-h-[80vh] overflow-auto"
                 />
               )}
             </Show>
-          )}
-        </Show>
-
-        <Show
-          when={trace.rounds.length > 0}
-          fallback={<WaitingForTraceFallback />}
-        >
-          <ExtractionTraceView
-            trace={trace}
-            onRoundElement={handleRoundElement}
-          />
-        </Show>
+          </div>
+        </div>
       </div>
-    </ErrorBoundary>
+
+      {/* Error toast */}
+      <Show when={error()}>
+        {(errMsg) => (
+          <div class="toast toast-end toast-bottom z-50">
+            <div class="alert alert-error shadow-lg">
+              <span class="text-sm">{errMsg()}</span>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
   );
 }
 
-function ExtractPageContent() {
+// ── Page ─────────────────────────────────────────────────────────
+
+function ExtractNewPage() {
   const [runId, setRunId] = createSignal(0);
-  const [runStatus, setRunStatus] = createSignal<
-    "idle" | "running" | "complete" | "error"
-  >("idle");
+  const [runStatus, setRunStatus] = createSignal<Status>("idle");
 
   return (
-    <main class="mx-auto max-w-4xl px-4 py-12 space-y-6">
-      <div class="flex items-center justify-between gap-3">
-        <h1 class="text-3xl font-bold">PDS Extraction</h1>
+    <main class="mx-auto max-w-[1400px] px-4 sm:px-6 py-8 space-y-6">
+      {/* Header */}
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">PDS Extraction</h1>
+          <p class="text-sm opacity-50 mt-0.5">
+            Extract structured data from Product Disclosure Statements
+          </p>
+        </div>
         <button
           type="button"
-          class="btn btn-primary"
+          class="btn btn-primary btn-sm"
           disabled={runStatus() === "running"}
           onClick={() => {
             setRunStatus("running");
             setRunId((id) => id + 1);
           }}
         >
-          {runStatus() === "running" ? "Running..." : "Run extraction"}
+          <Show
+            when={runStatus() !== "running"}
+            fallback={
+              <>
+                <span class="loading loading-spinner loading-xs" />
+                Running...
+              </>
+            }
+          >
+            {runId() === 0 ? "Run Extraction" : "Re-run"}
+          </Show>
         </button>
       </div>
 
-      <Show when={runId() > 0}>
-        <ExtractionStreamView runId={runId()} onStatusChange={setRunStatus} />
-      </Show>
+      <div class="divider my-0" />
+
+      <ErrorBoundary
+        fallback={(err) => (
+          <div class="alert alert-error">
+            <span>Extraction failed: {err?.message ?? "Unknown error"}</span>
+          </div>
+        )}
+      >
+        <Show
+          when={runId() > 0}
+          fallback={
+            <div class="flex flex-col items-center justify-center py-24 opacity-30 gap-3">
+              <svg
+                class="w-12 h-12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+              <p class="text-sm font-medium">Click "Run Extraction" to begin</p>
+            </div>
+          }
+        >
+          <ExtractionView runId={runId()} onStatusChange={setRunStatus} />
+        </Show>
+      </ErrorBoundary>
     </main>
   );
 }
 
-export default function Extract() {
+export default function ExtractNew() {
   createProtectedRoute();
   createAsync(() => requireAuthQuery(), { deferStream: true });
-  return <ExtractPageContent />;
+  return <ExtractNewPage />;
 }

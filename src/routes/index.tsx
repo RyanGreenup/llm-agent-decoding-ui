@@ -1,6 +1,7 @@
 import { createAsync, type RouteDefinition } from "@solidjs/router";
 import { createSignal } from "solid-js";
-import ChatContainer, { type Message } from "~/components/ChatContainer";
+import ChatContainer from "~/components/ChatContainer";
+import type { Message } from "~/lib/types";
 import ChatInput from "~/components/ChatInput";
 import ChatNavbar from "~/components/ChatNavbar";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
@@ -58,6 +59,7 @@ export default function Home() {
     "What's the High Growth return?",
     "Total annual fees on $100k?",
     "Preservation age if born 1962?",
+    "Identify the fees from Section 7",
   ];
 
   const askSuggested = (question: string) => {

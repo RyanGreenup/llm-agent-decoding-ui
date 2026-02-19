@@ -1,8 +1,9 @@
 import { Show, splitProps } from "solid-js";
+import type { JSX } from "solid-js";
 import Check from "lucide-solid/icons/check";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 
-interface ReviewBadgeProps {
+interface ReviewBadgeProps extends JSX.HTMLAttributes<HTMLDivElement> {
   status: "pass" | "warning";
   note?: string;
 }
@@ -10,7 +11,7 @@ interface ReviewBadgeProps {
 export default function ReviewBadge(props: ReviewBadgeProps) {
   const [local, rest] = splitProps(props, ["status", "note"]);
 
-  // NOTE: avoid mt-* here — this component renders inside <td> where top margin causes misalignment
+  // NOTE: avoid baking in mt-* — margin is caller-controlled via spread props
   return (
     <div class="flex items-center gap-2" {...rest}>
       <div

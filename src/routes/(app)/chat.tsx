@@ -6,6 +6,8 @@ import ChatInput from "~/components/ChatInput";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { getModels } from "~/lib/models";
 import { createProtectedRoute, getUser } from "~/lib/auth";
+import { stuffedChat } from "~/lib/chat/stuffed-chat";
+import { getRawDocPath } from "~/lib/dataCleaning/convert_to_markdown";
 
 export const route = {
   preload: () => {
@@ -28,10 +30,10 @@ export default function Chat() {
   const [isTyping, setIsTyping] = createSignal(false);
   const [selectedModelId] = createSignal(DEFAULT_MODEL_ID);
 
-  // #TODO: Connect to actual chat API
-  const sendMessage = () => {
-    const msg = input().trim();
+  const sendMessage = async (override?: string) => {
+    const msg = (override ?? input()).trim();
     if (!msg) return;
+    const priorMessages = messages();
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -39,20 +41,40 @@ export default function Chat() {
       content: msg,
     };
 
-    setMessages([...messages(), userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsTyping(true);
 
-    // #TODO: Replace with actual API call
-    setTimeout(() => {
+    try {
+      const history = priorMessages.map(({ role, content }) => ({ role, content }));
+      const documentPath = await getRawDocPath();
+      const response = await stuffedChat(
+        msg,
+        documentPath,
+        history,
+        selectedModelId(),
+      );
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Connect to /api/chat to see live responses.",
+        content:
+          response.trim() ||
+          "I couldn't generate a response from the document for that question.",
       };
-      setMessages([...messages(), aiMessage]);
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error("chat failed:", error);
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content:
+          "I hit an error while processing that message. Please try again.",
+      };
+      setMessages((prev) => [...prev, aiMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const suggestedQuestions = [
@@ -64,7 +86,7 @@ export default function Chat() {
 
   const askSuggested = (question: string) => {
     setInput(question);
-    sendMessage();
+    void sendMessage(question);
   };
 
   return (
@@ -77,7 +99,7 @@ export default function Chat() {
           onAskSuggested={askSuggested}
         />
       </div>
-      <ChatInput value={input} onInput={setInput} onSend={sendMessage} />
+      <ChatInput value={input} onInput={setInput} onSend={() => void sendMessage()} />
     </div>
   );
 }

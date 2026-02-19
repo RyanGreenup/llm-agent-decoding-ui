@@ -12,6 +12,7 @@ import {
 import {
   getSession,
   login as loginUser,
+  LoginFailureError,
   logout as logoutSession,
 } from "./server";
 import { lookupClientId, getUserRole } from "./roles";
@@ -149,10 +150,16 @@ export const login = action(async (formData: FormData) => {
     });
   } catch (err) {
     await penalizeFailedLogin(ip, username);
+    const isUnknownUserAttempt =
+      err instanceof LoginFailureError && err.reason === "user_not_found";
     logAuditEvent({
       username,
-      eventType: "login_failed",
-      details: "Invalid credentials",
+      eventType: isUnknownUserAttempt
+        ? "login_failed_unknown_user"
+        : "login_failed",
+      details: isUnknownUserAttempt
+        ? "Login attempt for unknown user"
+        : "Invalid credentials",
       ipAddress: ip,
     });
     return err as Error;

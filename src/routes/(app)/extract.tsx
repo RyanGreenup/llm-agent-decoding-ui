@@ -30,9 +30,93 @@ function emptyTrace(model = "unknown"): ExtractionTrace {
   };
 }
 
+async function* parseNdjsonEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<ExtractStreamWireEvent> {
+  const textStream = (
+    body as ReadableStream<BufferSource>
+  ).pipeThrough(new TextDecoderStream());
+  const reader = textStream.getReader();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += value ?? "";
+      let lineBreakIndex = buffer.indexOf("\n");
+      while (lineBreakIndex >= 0) {
+        const line = buffer.slice(0, lineBreakIndex).trim();
+        buffer = buffer.slice(lineBreakIndex + 1);
+        lineBreakIndex = buffer.indexOf("\n");
+        if (!line) continue;
+
+        try {
+          yield JSON.parse(line) as ExtractStreamWireEvent;
+        } catch {
+          console.warn("Malformed NDJSON line:", line);
+        }
+      }
+    }
+
+    const finalLine = buffer.trim();
+    if (!finalLine) return;
+
+    try {
+      yield JSON.parse(finalLine) as ExtractStreamWireEvent;
+    } catch {
+      console.warn("Malformed final NDJSON line:", finalLine);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export const route = {
   preload: () => requireAuthQuery(),
 } satisfies RouteDefinition;
+
+function ExtractionErrorFallback() {
+  return <p class="text-error">Extraction failed.</p>;
+}
+
+function TraceStatusBar(props: { status: string; roundsLoaded: number }) {
+  return (
+    <div class="text-xs opacity-70">
+      Status: {props.status} · Rounds loaded: {props.roundsLoaded}
+    </div>
+  );
+}
+
+function RunningTraceNotice() {
+  return (
+    <div class="alert alert-info py-2 text-sm">
+      More trace updates are coming as extraction continues.
+    </div>
+  );
+}
+
+function TraceErrorNotice(props: { error: string }) {
+  return <div class="alert alert-error">{props.error}</div>;
+}
+
+function ExtractedDataPanel(props: { data: unknown; path: string }) {
+  return (
+    <div class="space-y-2">
+      <h2 class="text-sm font-semibold opacity-80">Extracted Data</h2>
+      <JsonViewer
+        data={props.data}
+        class="max-h-[70vh] overflow-auto rounded-lg"
+      />
+      <p class="text-xs opacity-60 break-all">Source: {props.path}</p>
+    </div>
+  );
+}
+
+function WaitingForTraceFallback() {
+  return <p class="text-sm opacity-70">Waiting for first trace chunk...</p>;
+}
 
 function ExtractionStreamView(props: {
   runId: number;
@@ -64,6 +148,32 @@ function ExtractionStreamView(props: {
     const abort = new AbortController();
 
     const readStream = async () => {
+      const handleStreamEvent = (event: ExtractStreamWireEvent) => {
+        if (event.runId !== activeRunId) return;
+
+        switch (event.type) {
+          case "pipeline_started":
+            setTraceStatus("running");
+            props.onStatusChange?.("running");
+            break;
+          case "round_completed":
+            setTrace(reconcile(event.trace));
+            break;
+          case "pipeline_completed":
+            setPath(event.path);
+            setData(event.data);
+            setTrace(reconcile(event.trace));
+            setTraceStatus("complete");
+            props.onStatusChange?.("complete");
+            break;
+          case "pipeline_failed":
+            setTraceStatus("error");
+            setTraceError(event.error);
+            props.onStatusChange?.("error");
+            break;
+        }
+      };
+
       try {
         const response = await fetch("/api/extract-stream", {
           method: "POST",
@@ -80,75 +190,10 @@ function ExtractionStreamView(props: {
           throw new Error("Extraction stream did not return a body");
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          let lineBreakIndex = buffer.indexOf("\n");
-          while (lineBreakIndex >= 0) {
-            const line = buffer.slice(0, lineBreakIndex).trim();
-            buffer = buffer.slice(lineBreakIndex + 1);
-            lineBreakIndex = buffer.indexOf("\n");
-            if (!line) continue;
-
-            let event: ExtractStreamWireEvent;
-            try {
-              event = JSON.parse(line) as ExtractStreamWireEvent;
-            } catch {
-              console.warn("Malformed NDJSON line:", line);
-              continue;
-            }
-            // AbortController cancels prior runs; keep runId filtering as a
-            // defensive guard against any late buffered chunks.
-            if (event.runId !== activeRunId) continue;
-
-            if (event.type === "pipeline_started") {
-              setTraceStatus("running");
-              props.onStatusChange?.("running");
-              continue;
-            }
-
-            if (event.type === "round_completed") {
-              setTrace(reconcile(event.trace));
-              continue;
-            }
-
-            if (event.type === "pipeline_completed") {
-              setPath(event.path);
-              setData(event.data);
-              setTrace(reconcile(event.trace));
-              setTraceStatus("complete");
-              props.onStatusChange?.("complete");
-              continue;
-            }
-
-            setTraceStatus("error");
-            setTraceError(event.error);
-            props.onStatusChange?.("error");
-          }
-        }
-
-        const finalLine = buffer.trim();
-        if (finalLine) {
-          let event: ExtractStreamWireEvent | undefined;
-          try {
-            event = JSON.parse(finalLine) as ExtractStreamWireEvent;
-          } catch {
-            console.warn("Malformed final NDJSON line:", finalLine);
-          }
-          if (!event) return;
-          if (event.runId === activeRunId && event.type === "pipeline_completed") {
-            setPath(event.path);
-            setData(event.data);
-            setTrace(reconcile(event.trace));
-            setTraceStatus("complete");
-            props.onStatusChange?.("complete");
-          }
+        for await (const streamEvent of parseNdjsonEvents(response.body)) {
+          // AbortController cancels prior runs; keep runId filtering as a
+          // defensive guard against any late buffered chunks.
+          handleStreamEvent(streamEvent);
         }
       } catch (error) {
         if (abort.signal.aborted) return;
@@ -176,36 +221,34 @@ function ExtractionStreamView(props: {
   };
 
   return (
-    <ErrorBoundary fallback={<p class="text-error">Extraction failed.</p>}>
+    <ErrorBoundary fallback={<ExtractionErrorFallback />}>
       <div class="space-y-4">
-        <div class="text-xs opacity-70">
-          Status: {traceStatus()} · Rounds loaded: {trace.rounds.length}
-        </div>
+        <TraceStatusBar status={traceStatus()} roundsLoaded={trace.rounds.length} />
 
         <Show when={traceStatus() === "running" && trace.rounds.length > 0}>
-          <div class="alert alert-info py-2 text-sm">
-            More trace updates are coming as extraction continues.
-          </div>
+          <RunningTraceNotice />
         </Show>
 
         <Show when={traceError()}>
-          <div class="alert alert-error">{traceError()}</div>
+          {(error) => <TraceErrorNotice error={error()} />}
         </Show>
 
-        <Show when={data() && path()}>
-          <div class="space-y-2">
-            <h2 class="text-sm font-semibold opacity-80">Extracted Data</h2>
-            <JsonViewer
-              data={data()}
-              class="max-h-[70vh] overflow-auto rounded-lg"
-            />
-            <p class="text-xs opacity-60 break-all">Source: {path()}</p>
-          </div>
+        <Show when={data()}>
+          {(extractedData) => (
+            <Show when={path()}>
+              {(sourcePath) => (
+                <ExtractedDataPanel
+                  data={extractedData()}
+                  path={sourcePath()}
+                />
+              )}
+            </Show>
+          )}
         </Show>
 
         <Show
           when={trace.rounds.length > 0}
-          fallback={<p class="text-sm opacity-70">Waiting for first trace chunk...</p>}
+          fallback={<WaitingForTraceFallback />}
         >
           <ExtractionTraceView
             trace={trace}

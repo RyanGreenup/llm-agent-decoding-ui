@@ -1,5 +1,3 @@
-"use server";
-
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { PdsSchema, type PdsData } from "./pds-schema";

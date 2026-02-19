@@ -1,5 +1,5 @@
 import { createAsync, type RouteDefinition } from "@solidjs/router";
-import { Suspense } from "solid-js";
+import { ErrorBoundary, Suspense } from "solid-js";
 import Hero from "~/components/Hero";
 import Table, { type Column } from "~/components/Table";
 import { getModels, type Model } from "~/lib/models";
@@ -19,16 +19,18 @@ const columns: Column<Model>[] = [
 ];
 
 export default function Home() {
-  const models = createAsync(() => getModels());
+  const models = createAsync(() => getModels(), { deferStream: true });
 
   return (
     <main>
       <Hero title="LLM Agent" subtitle="A simple interface for interacting with large language models." />
       <div class="mx-auto max-w-4xl px-4 py-8">
         <h2 class="text-2xl font-bold mb-4">Available Models</h2>
-        <Suspense fallback={<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg" /></div>}>
-          <Table columns={columns} rows={models() ?? []} zebra />
-        </Suspense>
+        <ErrorBoundary fallback={<div class="alert alert-error">Failed to load models.</div>}>
+          <Suspense fallback={<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg" /></div>}>
+            <Table columns={columns} rows={models() ?? []} zebra />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </main>
   );

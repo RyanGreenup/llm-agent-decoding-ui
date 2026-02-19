@@ -18,7 +18,6 @@
     "@types/node": "^25.3.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
-    "chonkie": "^0.3.0",
     "daisyui": "^5.5.18",
     "dompurify": "^3.3.1",
     "file-type": "^21.3.0",

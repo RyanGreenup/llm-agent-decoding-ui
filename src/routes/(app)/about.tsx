@@ -22,7 +22,7 @@ export default function About() {
           </ul>
         </Card>
         <div class="text-center pt-4">
-          <A href="/" class="btn btn-primary">Browse Models</A>
+          <A href="/chat" class="btn btn-primary">Go to Chat</A>
         </div>
       </div>
     </main>

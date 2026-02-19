@@ -1,16 +1,19 @@
 import { A, createAsync, useLocation, useSubmission } from "@solidjs/router";
 import { Show } from "solid-js";
 import FileText from "lucide-solid/icons/file-text";
-import ChevronDown from "lucide-solid/icons/chevron-down";
+import MessageSquare from "lucide-solid/icons/message-square";
+import FileDown from "lucide-solid/icons/file-down";
+import Info from "lucide-solid/icons/info";
 import LogOut from "lucide-solid/icons/log-out";
+import User from "lucide-solid/icons/user";
 import { getModels } from "~/lib/models";
 import { getUser, logout } from "~/lib/auth";
 import { DEFAULT_MODEL_ID } from "~/lib/config";
-import { Button } from "~/components/Button";
+
+// -- Top bar Nav --------------------------------------------------------------
 
 export default function Nav() {
   const location = useLocation();
-  const active = (path: string) => (path === location.pathname ? "active" : "");
   const isChat = () => location.pathname === "/chat";
 
   const models = createAsync(() => getModels());
@@ -21,7 +24,7 @@ export default function Nav() {
   };
 
   return (
-    <div class="navbar bg-base-100 shadow-sm border-b border-base-300 px-6">
+    <>
       <div class="navbar-start gap-3">
         <Show when={isChat()}>
           <div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
@@ -33,42 +36,61 @@ export default function Nav() {
             PDS Agent
           </A>
           <Show when={isChat()}>
-            <p class="text-xs opacity-50">
+            <p class="text-xs opacity-50 hidden sm:block">
               NovigiSuper — Product Disclosure Statement
             </p>
           </Show>
         </div>
       </div>
+
       <div class="navbar-end gap-2">
         <Show when={isChat()}>
-          <div class="badge badge-ghost gap-1 text-xs">
-            <span class="w-2 h-2 rounded-full bg-success inline-block" />
-            {activeModelName() ?? DEFAULT_MODEL_ID}
+          <div class="hidden md:flex items-center gap-2">
+            <div class="badge badge-ghost gap-1 text-xs">
+              <span class="w-2 h-2 rounded-full bg-success inline-block" />
+              {activeModelName() ?? DEFAULT_MODEL_ID}
+            </div>
           </div>
-          <div class="badge badge-outline text-xs">ReAct + Reflect</div>
         </Show>
-        <ul class="menu menu-horizontal px-1">
-          <li>
-            <A href="/chat" class={active("/chat")}>
-              Chat
-            </A>
-          </li>
-          <li>
-            <A href="/document" class={active("/document")}>
-              Convert
-            </A>
-          </li>
-          <li>
-            <A href="/about" class={active("/about")}>
-              About
-            </A>
-          </li>
-        </ul>
         <UserDropdown />
       </div>
-    </div>
+    </>
   );
 }
+
+// -- Sidebar Nav --------------------------------------------------------------
+
+export function SidebarNav() {
+  const location = useLocation();
+  const active = (path: string) =>
+    path === location.pathname ? "menu-active" : "";
+
+  return (
+    <ul class="menu w-full gap-1 p-4">
+      <li class="menu-title">Navigation</li>
+      <li>
+        <A href="/chat" class={active("/chat")}>
+          <MessageSquare class="h-4 w-4" />
+          Chat
+        </A>
+      </li>
+      <li>
+        <A href="/document" class={active("/document")}>
+          <FileDown class="h-4 w-4" />
+          Convert
+        </A>
+      </li>
+      <li>
+        <A href="/about" class={active("/about")}>
+          <Info class="h-4 w-4" />
+          About
+        </A>
+      </li>
+    </ul>
+  );
+}
+
+// -- User dropdown ------------------------------------------------------------
 
 function UserDropdown() {
   const user = createAsync(() => getUser(), { deferStream: true });
@@ -77,13 +99,18 @@ function UserDropdown() {
   return (
     <Show when={user()}>
       <div class="dropdown dropdown-end">
-        <Button variant="ghost" tabindex="0">
-          <span class="text-sm">{user()!.username}</span>
-          <ChevronDown class="ml-1 w-4 h-4" />
-        </Button>
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-ghost btn-circle avatar placeholder"
+        >
+          <div class="w-10 rounded-full bg-neutral text-neutral-content">
+            <User class="h-5 w-5" />
+          </div>
+        </div>
         <ul
           tabindex="0"
-          class="menu menu-sm dropdown-content mt-1 z-[1] p-2 shadow bg-base-100 rounded-box w-52 border border-base-300"
+          class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
         >
           <li class="menu-title">
             <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
@@ -91,8 +118,8 @@ function UserDropdown() {
             </span>
           </li>
           <li>
-            <span class="px-3 py-2 text-sm text-base-content/70 cursor-default hover:bg-transparent">
-              {user()!.username} ({user()!.clientId})
+            <span class="text-sm text-base-content/70 cursor-default hover:bg-transparent">
+              {user()!.username}
             </span>
           </li>
           <div class="divider my-1" />
@@ -100,10 +127,10 @@ function UserDropdown() {
             <form action={logout} method="post">
               <button
                 type="submit"
-                class="px-3 py-2 text-error w-full text-left flex items-center hover:bg-error/10 rounded-lg transition-colors"
+                class="text-error w-full text-left flex items-center gap-2"
                 disabled={loggingOut.pending}
               >
-                <LogOut class="w-4 h-4 mr-2" />
+                <LogOut class="w-4 h-4" />
                 {loggingOut.pending ? "Logging out..." : "Logout"}
               </button>
             </form>

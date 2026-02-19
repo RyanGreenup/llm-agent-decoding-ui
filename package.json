@@ -13,6 +13,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@types/katex": "^0.16.8",
     "@types/node": "^25.3.0",
+    "bcrypt": "^6.0.0",
     "daisyui": "^5.5.18",
     "dompurify": "^3.3.1",
     "file-type": "^21.3.0",
@@ -25,6 +26,7 @@
     "markitdown": "^0.0.4",
     "markitdown-ts": "^0.0.10",
     "prettier": "^3.8.1",
+    "rate-limiter-flexible": "^9.1.1",
     "solid-js": "^1.9.5",
     "vinxi": "^0.5.7"
   },

@@ -7,6 +7,7 @@ import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
 import { validateExtraction } from "./validate-extraction";
 import { DEFAULT_MODEL_ID } from "../config";
 import { getOpenAIClient } from "../openai/server";
+import type { ExtractionPipelineEvent } from "./stream-types";
 import type {
   ExtractionRound,
   ExtractionTrace,
@@ -46,37 +47,92 @@ interface RoundOutput {
   messageContent: string;
 }
 
+export type ExtractionStreamEvent = ExtractionPipelineEvent;
+
 /** Extract structured PDS data from markdown, reflecting on validation failures up to N times. */
 export async function extractPdsData(
   markdown: string,
 ): Promise<ExtractionResult> {
   "use server";
+  let finalResult: ExtractionResult | undefined;
+
+  for await (const event of extractPdsDataEvents(markdown)) {
+    if (event.type === "pipeline_completed") {
+      finalResult = event.result;
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error("Extraction pipeline ended without a final result");
+  }
+
+  return finalResult;
+}
+
+/**
+ * Stream extraction progress as discrete pipeline events.
+ * Emits one event per completed round so callers can render tracing progressively.
+ */
+export async function* extractPdsDataEvents(
+  markdown: string,
+): AsyncGenerator<ExtractionPipelineEvent, ExtractionResult, void> {
+  "use server";
   const client = await getOpenAIClient();
   const pipelineStart = performance.now();
   const rounds: ExtractionRound[] = [];
+
+  yield {
+    type: "pipeline_started",
+    maxReflectionRounds: MAX_REFLECTION_ROUNDS,
+  };
 
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
     { role: "user", content: markdown },
   ];
 
-  // Initial extraction
-  let result = await extractAndValidate(client, messages, markdown, 0, "initial_extraction", null);
-  rounds.push(result.round);
-
-  // Feed validation failures back for self-correction
-  for (let i = 1; i <= MAX_REFLECTION_ROUNDS && !result.round.passed; i++) {
-    result = await reflectAndValidate(client, messages, markdown, result, i);
-    rounds.push(result.round);
-  }
-
-  if (!result.round.passed) {
-    console.warn(
-      `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
+  try {
+    // Initial extraction
+    let result = await extractAndValidate(
+      client,
+      messages,
+      markdown,
+      0,
+      "initial_extraction",
+      null,
     );
-  }
+    rounds.push(result.round);
+    yield {
+      type: "round_completed",
+      round: result.round,
+      trace: buildTrace(rounds, pipelineStart),
+    };
 
-  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+    // Feed validation failures back for self-correction
+    for (let i = 1; i <= MAX_REFLECTION_ROUNDS && !result.round.passed; i++) {
+      result = await reflectAndValidate(client, messages, markdown, result, i);
+      rounds.push(result.round);
+      yield {
+        type: "round_completed",
+        round: result.round,
+        trace: buildTrace(rounds, pipelineStart),
+      };
+    }
+
+    if (!result.round.passed) {
+      console.warn(
+        `Extraction grounding check still failing after ${MAX_REFLECTION_ROUNDS} reflection rounds.`,
+      );
+    }
+
+    const finalResult = { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+    yield { type: "pipeline_completed", result: finalResult };
+    return finalResult;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    yield { type: "pipeline_failed", error: message };
+    throw error;
+  }
 }
 
 /** Read a document from disk and run the extraction pipeline. */
@@ -86,6 +142,15 @@ export async function extractPdsFromFile(
   "use server";
   const markdown = await readDocument(path);
   return extractPdsData(markdown);
+}
+
+/** Stream extraction events from a document file path. */
+export async function* extractPdsFromFileEvents(
+  path: string,
+): AsyncGenerator<ExtractionPipelineEvent, ExtractionResult, void> {
+  "use server";
+  const markdown = await readDocument(path);
+  return yield* extractPdsDataEvents(markdown);
 }
 
 // ── Pipeline steps ──────────────────────────────────────────────

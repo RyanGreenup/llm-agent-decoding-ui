@@ -1,8 +1,10 @@
 import { A } from "@solidjs/router";
 import Card from "~/components/Card";
 import Hero from "~/components/Hero";
+import { createProtectedRoute } from "~/lib/auth";
 
 export default function About() {
+  createProtectedRoute();
   return (
     <main>
       <Hero title="About" subtitle="A simple interface for comparing and exploring large language models." />

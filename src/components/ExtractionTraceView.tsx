@@ -7,7 +7,10 @@ import FeedbackBlock from "./FeedbackBlock";
 import RoundHeader from "./RoundHeader";
 import TokenBreakdown from "./TokenBreakdown";
 
-export default function ExtractionTraceView(props: { trace: ExtractionTrace }) {
+export default function ExtractionTraceView(props: {
+  trace: ExtractionTrace;
+  onRoundElement?: (el: HTMLDivElement, roundNumber: number) => void;
+}) {
   return (
     <Card title="Extraction Trace">
       <ExtractionSummaryBar trace={props.trace} />
@@ -16,7 +19,10 @@ export default function ExtractionTraceView(props: { trace: ExtractionTrace }) {
       <div class="mt-4 space-y-2">
         <For each={props.trace.rounds}>
           {(round) => (
-            <div class="collapse collapse-arrow bg-base-200 rounded-lg">
+            <div
+              class="collapse collapse-arrow bg-base-200 rounded-lg"
+              ref={(el) => props.onRoundElement?.(el, round.round)}
+            >
               <input type="checkbox" />
               <RoundHeader
                 role={round.role}

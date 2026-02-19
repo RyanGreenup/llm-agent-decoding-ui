@@ -19,6 +19,11 @@ export default function Nav() {
             </A>
           </li>
           <li>
+            <A href="/document" class={active("/convert")}>
+              Convert
+            </A>
+          </li>
+          <li>
             <A href="/about" class={active("/about")}>
               About
             </A>

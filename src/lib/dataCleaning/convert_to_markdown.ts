@@ -2,6 +2,8 @@
 
 import { basename, extname } from "node:path";
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { fileTypeFromFile } from "file-type";
 import { MarkItDown } from "markitdown-ts";
 import * as prettier from "prettier";
@@ -66,6 +68,34 @@ export async function convert_to_markdown(
   return await prettier.format(markdown, { parser: "markdown" });
 }
 
+const execFileAsync = promisify(execFile);
+
+// Handles tables better than markitdown-ts — pandoc produces proper
+// GitHub-Flavored Markdown pipe tables with alignment indicators.
+export async function convert_to_markdown_pandoc(
+  source: string,
+  {
+    skip_format = false,
+  }: {
+    skip_format?: boolean;
+  } = {},
+): Promise<string> {
+  "use server";
+  const { stdout } = await execFileAsync("pandoc", [
+    source,
+    "-f",
+    "docx",
+    "-t",
+    "gfm",
+    "--wrap=none",
+  ]);
+  if (!stdout) {
+    throw new Error("Pandoc conversion failed: no output");
+  }
+  if (skip_format) return stdout;
+  return await prettier.format(stdout, { parser: "markdown" });
+}
+
 export async function get_raw_doc_path(): Promise<string> {
   "use server";
   const raw = process.env.RAW_DOC_PATH;
@@ -77,4 +107,5 @@ export async function get_raw_doc_path(): Promise<string> {
 
 export const readDocument = read_document;
 export const convertToMarkdown = convert_to_markdown;
+export const convertToMarkdownPandoc = convert_to_markdown_pandoc;
 export const getRawDocPath = get_raw_doc_path;

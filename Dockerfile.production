@@ -1,0 +1,82 @@
+# =============================================================================
+# Production Hardened Dockerfile
+# =============================================================================
+# Build: docker build -f Dockerfile.production -t llm-agent:latest .
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Dependencies (cached layer – production only)
+# -----------------------------------------------------------------------------
+FROM docker.io/library/node:22-slim AS deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# -----------------------------------------------------------------------------
+# Stage 2: Builder
+# -----------------------------------------------------------------------------
+FROM docker.io/library/node:22-slim AS builder
+
+WORKDIR /app
+
+# Build-time dependencies (bcrypt, better-sqlite3 need native compilation)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ALL dependencies (including dev) for build
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy only files required for build
+COPY app.config.ts tsconfig.json ./
+COPY src ./src
+COPY public ./public
+COPY tests/route-auth-guard.test.ts ./tests/route-auth-guard.test.ts
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+# Stage 3: Production Runtime
+# -----------------------------------------------------------------------------
+FROM docker.io/library/node:22-slim AS production
+
+WORKDIR /app
+
+# Security updates, minimal runtime deps
+# NOTE sqlite here can help for debugging, remove in production
+# NOTE pandoc required for app
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends dumb-init pandoc && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Non-root user with explicit UID/GID
+RUN groupadd --gid 1001 appgroup && \
+    useradd --uid 1001 --gid appgroup --shell /bin/false --create-home appuser
+
+# Create data directory for SQLite (volume mount point)
+RUN mkdir -p /app/data && chown appuser:appgroup /app/data
+
+# Bundle required seed document
+COPY --chown=appuser:appgroup ["data/Product Disclosure Statement (PDS).docx", "/app/data/Product Disclosure Statement (PDS).docx"]
+
+# Copy production dependencies
+COPY --from=deps --chown=appuser:appgroup /app/node_modules ./node_modules
+
+# Copy built application (Vinxi/SolidStart outputs to .output/)
+COPY --from=builder --chown=appuser:appgroup /app/.output ./.output
+COPY --from=builder --chown=appuser:appgroup /app/package.json ./
+
+ENV NODE_ENV=production
+
+USER appuser
+
+EXPOSE 3075
+
+# Proper signal handling with dumb-init
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["node", ".output/server/index.mjs"]

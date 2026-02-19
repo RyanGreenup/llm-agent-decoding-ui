@@ -1,0 +1,53 @@
+# VCS and local metadata
+.git
+.gitignore
+.worktrees
+
+# Secrets and env
+.env
+.env.*
+!.env.example
+
+# Dependency and build artifacts
+node_modules
+.output
+.vinxi
+dist
+build
+coverage
+
+# Local tooling/artifacts
+.artifacts
+.claude
+
+# OS/editor noise
+.DS_Store
+.idea
+.vscode
+*.swp
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Project files not needed for image build
+README.md
+CLAUDE.md
+docs
+notes
+tests
+!tests/
+tests/*
+!tests/route-auth-guard.test.ts
+scratch.ts
+docker-compose.yml
+docker-compose.production.yml
+caddy
+!caddy/
+caddy/*
+!caddy/Dockerfile
+!caddy/Caddyfile

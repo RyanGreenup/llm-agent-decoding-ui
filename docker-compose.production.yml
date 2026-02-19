@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    expose:
+      - "3075"
+    env_file:
+      - .env
+    volumes:
+      - pds-llm-agent-data:/app/data
+
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+
+volumes:
+  pds-llm-agent-data:
+    external: true

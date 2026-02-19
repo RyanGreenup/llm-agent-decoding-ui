@@ -1,0 +1,29 @@
+FROM docker.io/library/node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV UV_PYTHON_PREFERENCE=only-system
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY scripts ./scripts
+
+# Pre-install Python dependencies so runs are instant
+# Dummy DATABASE_PATH so ensure_schema() can init a throwaway DB at build time
+RUN DATABASE_PATH=/tmp/build.db uv run scripts/manage_users.py --help > /dev/null && rm -f /tmp/build.db
+
+# Match the app container's UID/GID so DB files have correct ownership
+RUN groupadd --gid 1001 appgroup && \
+    useradd --uid 1001 --gid appgroup --shell /bin/false --create-home appuser
+USER appuser
+
+ENTRYPOINT ["uv", "run", "scripts/manage_users.py"]

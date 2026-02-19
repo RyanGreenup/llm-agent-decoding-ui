@@ -1,0 +1,91 @@
+{
+    order rate_limit before basicauth
+}
+
+# Dev access - locked to private/loopback IPs only
+http://localhost {
+    @private remote_ip private_ranges
+    handle @private {
+        # NOTE [fn_1]
+        rate_limit {
+            zone dev_login_zone {
+                match {
+                    method POST
+                    path /login
+                }
+                key    {http.request.remote.host}
+                events 10
+                window 5m
+            }
+            zone dev_pages_zone {
+                match {
+                    not path /_build/* *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.woff *.woff2
+                }
+                key    {http.request.remote.host}
+                events 500
+                window 1m
+            }
+        }
+        reverse_proxy app:3075
+    }
+    respond 403
+}
+
+pds.examples.ryansnotes.org {
+    encode zstd gzip
+
+    request_body {
+        max_size 64KB
+    }
+
+    header {
+        -Server
+
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+        # Add CSP once you know all required sources:
+        # Content-Security-Policy "default-src 'self'; ..."
+    }
+
+    # NOTE [fn_1]
+    rate_limit {
+        zone login_zone {
+            match {
+                method POST
+                path /login
+            }
+            key    {http.request.remote.host}
+            events 10
+            window 5m
+        }
+        zone pages_zone {
+            match {
+                not path /_build/* *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.woff *.woff2
+            }
+            key    {http.request.remote.host}
+            events 500
+            window 1m
+        }
+    }
+
+    reverse_proxy app:3075 {
+        # Uncomment if you add a health endpoint:
+        # health_uri /healthz
+
+        transport http {
+            dial_timeout 5s
+            read_timeout 30s
+            write_timeout 30s
+        }
+    }
+}
+
+
+# [fn_1]: This only catches HTTP requests. If something like playwright hit the
+# frontend this would do nothing as SolidStart posts actions to `/_server` (NOT
+# `/login`). This enpoint is undocumented so it could change and it's shared by
+# ALL server actions.

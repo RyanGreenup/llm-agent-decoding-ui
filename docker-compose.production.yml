@@ -9,11 +9,13 @@
 
 services:
   app:
+    image: llm-agent:latest
     build:
       context: .
       dockerfile: Dockerfile.production
+    pull_policy: never
     expose:
-      - "3075"
+      - "0.0.0.0:3075"
     env_file:
       - .env
     volumes:

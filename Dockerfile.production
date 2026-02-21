@@ -50,7 +50,7 @@ WORKDIR /app
 # NOTE sqlite here can help for debugging, remove in production
 # NOTE pandoc required for app
 RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends dumb-init pandoc && \
+    apt-get install -y --no-install-recommends dumb-init pandoc sqlite3 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 

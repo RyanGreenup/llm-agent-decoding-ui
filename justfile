@@ -30,6 +30,9 @@ prod-volume:
     docker volume create pds-llm-agent-data
 
 # Production (hardened build + Caddy reverse proxy)
+prod-image-build:
+    docker build -f Dockerfile.production -t llm-agent:latest .
+
 prod-build:
     docker compose -f docker-compose.production.yml build
 

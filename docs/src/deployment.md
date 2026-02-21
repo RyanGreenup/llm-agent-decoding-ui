@@ -117,20 +117,36 @@ just deploy-down
 
 ### User Management
 
+Runs inside the app container via `podman exec` (the app must be running):
+
 ```bash
 just podman-manage-users create-user <name>
 just podman-manage-users update-password
 just podman-manage-users delete-user
 ```
 
+On first startup with an empty database, a default admin account is auto-seeded
+and the credentials are printed to the container logs:
+
+```bash
+just deploy-log-app
+```
+
+### Logs
+
+```bash
+just deploy-log-app    # app stdout/stderr
+just deploy-log-caddy  # caddy stdout/stderr
+```
+
 ### Security Hardening
 
 All containers run with:
 - `ReadOnly=true` — read-only root filesystem
-- `DropCapability=ALL` — all Linux capabilities dropped
 - `NoNewPrivileges=true` — no privilege escalation
 - Non-root user (UID 1001)
 - Network isolation (app only reachable via Caddy)
+- Caddy: `DropCapability=ALL` + `AddCapability=NET_BIND_SERVICE`
 
 ## Useful Commands
 
@@ -143,4 +159,6 @@ All containers run with:
 | `just deploy-build` | Build production images       |
 | `just deploy-up` | Start production services        |
 | `just deploy-down` | Stop production services       |
+| `just deploy-log-app` | Tail app logs               |
+| `just deploy-log-caddy` | Tail caddy logs           |
 | `just podman-manage-users` | Manage users against production DB |

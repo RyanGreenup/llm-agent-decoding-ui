@@ -41,9 +41,10 @@
     "vinxi": "^0.5.7"
   },
   "devDependencies": {
+    "@inquirer/prompts": "^8.2.1",
     "@tailwindcss/vite": "^4.0.7",
-    "bun-types": "latest",
     "@types/dompurify": "^3.2.0",
+    "bun-types": "latest",
     "tailwindcss": "^4.0.7",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

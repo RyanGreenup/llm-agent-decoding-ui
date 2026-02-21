@@ -1,6 +1,6 @@
 "use server";
 
-import { executeRun } from "./db/sqlite";
+import { insertAuditLog } from "./db/sqlite";
 
 type AuditEvent = {
   userId?: string;
@@ -23,18 +23,14 @@ function normalizeIp(raw?: string): string | null {
 export function logAuditEvent(event: AuditEvent): void {
   "use server";
   try {
-    executeRun(
-      `INSERT INTO audit_log (user_id, username, event_type, details, ip_address, meta)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        event.userId ?? null,
-        event.username,
-        event.eventType,
-        event.details ?? "",
-        normalizeIp(event.ipAddress),
-        event.meta ? JSON.stringify(event.meta) : null,
-      ],
-    );
+    insertAuditLog({
+      userId: event.userId ?? null,
+      username: event.username,
+      eventType: event.eventType,
+      details: event.details ?? "",
+      ipAddress: normalizeIp(event.ipAddress),
+      meta: event.meta ? JSON.stringify(event.meta) : null,
+    });
   } catch (err) {
     console.error("Audit log insert failed:", err);
   }

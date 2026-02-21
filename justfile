@@ -58,18 +58,12 @@ prod: prod-volume prod-build prod-down prod-up
 
 # User management (create-user <name>, update-password, delete-user)
 manage-users *ARGS:
-    uv run scripts/manage_users.py {{ARGS}}
+    bun run scripts/manage_users.ts {{ARGS}}
 
-# Build the admin tooling image (node + python + uv, deps pre-installed)
-admin-build:
-    podman build -t pds-llm-agent-admin -f scripts/Dockerfile.admin .
-
-# User management against the production volume (podman quadlet)
-podman-manage-users *ARGS: admin-build
-    podman run --rm -it \
-        -v systemd-llm-agent-data:/app/data \
-        -e DATABASE_PATH=/app/data/app.db \
-        pds-llm-agent-admin {{ARGS}}
+# User management against the running production container
+podman-manage-users *ARGS:
+    podman exec -it systemd-llm-agent-app \
+        bun run scripts/manage_users.ts {{ARGS}}
 
 # =============================================================================
 # Podman Quadlet Deployment
@@ -109,6 +103,14 @@ deploy-up:
 # Stop services
 deploy-down:
     systemctl --user stop llm-agent-caddy llm-agent-app
+
+# View app logs
+deploy-log-app:
+    journalctl --user -u llm-agent-app -f
+
+# View caddy logs
+deploy-log-caddy:
+    journalctl --user -u llm-agent-caddy -f
 
 # Full deployment pipeline
 deploy: deploy-secrets deploy-build deploy-install deploy-down deploy-up

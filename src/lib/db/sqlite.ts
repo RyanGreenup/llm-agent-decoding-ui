@@ -1,6 +1,7 @@
 "use server";
 
 import { Database } from "bun:sqlite";
+import { initDatabase } from "./init";
 
 let _db: Database | null = null;
 
@@ -13,83 +14,94 @@ function getDb(): Database {
     _db = new Database(dbPath);
     _db.run("PRAGMA journal_mode = WAL;");
     _db.run("PRAGMA foreign_keys = ON;");
-    initSchema(_db);
+    initDatabase(_db);
   }
   return _db;
 }
 
-/**
- * Create tables if they don't already exist.
- * This is the SQLite equivalent of the PostgreSQL schema that was
- * previously spread across auth.*, bunnings.*, and field_ops.* schemas.
- */
-function initSchema(db: Database) {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS user_credentials (
-      user_id    TEXT PRIMARY KEY,
-      username   TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      client_id  TEXT,
-      role       TEXT
-    );
+// ── User credential queries ────────────────────────────────────────
 
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id    TEXT,
-      username   TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      details    TEXT,
-      ip_address TEXT,
-      meta       TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+type UserRow = {
+  id: string;
+  username: string;
+  clientId: string;
+  role: string | null;
+};
 
-    CREATE TABLE IF NOT EXISTS user_api_keys (
-      user_id    TEXT PRIMARY KEY REFERENCES user_credentials(user_id),
-      encrypted_key BLOB NOT NULL,
-      iv         BLOB NOT NULL,
-      auth_tag   BLOB NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-}
-
-/**
- * Execute a query and return all matching rows.
- */
-export function executeAuthQuery<T>(
-  sql: string,
-  params: unknown[] = [],
-): T[] {
+export function findUserCredentialsByUsername(
+  username: string,
+): UserRow | undefined {
   "use server";
   const db = getDb();
-  const stmt = db.query(sql);
-  return stmt.all(...params) as T[];
+  return db
+    .query(
+      `SELECT user_id AS id, username, client_id AS clientId, role
+       FROM user_credentials WHERE username = ?`,
+    )
+    .get(username) as UserRow | undefined;
 }
 
-/**
- * Execute a query and return the first matching row, or undefined.
- */
-export function executeAuthQueryOne<T>(
-  sql: string,
-  params: unknown[] = [],
-): T | undefined {
+export function findUserCredentialsById(id: string): UserRow | undefined {
   "use server";
   const db = getDb();
-  const stmt = db.query(sql);
-  return stmt.get(...params) as T | undefined;
+  return db
+    .query(
+      `SELECT user_id AS id, username, client_id AS clientId, role
+       FROM user_credentials WHERE user_id = ?`,
+    )
+    .get(id) as UserRow | undefined;
 }
 
-/**
- * Execute a write statement (INSERT, UPDATE, DELETE) and return run info.
- */
-export function executeRun(
-  sql: string,
-  params: unknown[] = [],
-): { lastInsertRowid: number; changes: number } {
+export function getPasswordHashByUsername(
+  username: string,
+): string | undefined {
   "use server";
   const db = getDb();
-  const stmt = db.query(sql);
-  return stmt.run(...params);
+  const row = db
+    .query(`SELECT password_hash FROM user_credentials WHERE username = ?`)
+    .get(username) as { password_hash: string } | undefined;
+  return row?.password_hash;
+}
+
+export function getClientIdByUserId(userId: string): string | undefined {
+  "use server";
+  const db = getDb();
+  const row = db
+    .query(`SELECT client_id FROM user_credentials WHERE user_id = ?`)
+    .get(userId) as { client_id: string } | undefined;
+  return row?.client_id;
+}
+
+export function getRoleByUserId(userId: string): string | undefined {
+  "use server";
+  const db = getDb();
+  const row = db
+    .query(`SELECT role FROM user_credentials WHERE user_id = ?`)
+    .get(userId) as { role: string } | undefined;
+  return row?.role;
+}
+
+// ── Audit log ──────────────────────────────────────────────────────
+
+export function insertAuditLog(entry: {
+  userId: string | null;
+  username: string;
+  eventType: string;
+  details: string;
+  ipAddress: string | null;
+  meta: string | null;
+}): void {
+  "use server";
+  const db = getDb();
+  db.query(
+    `INSERT INTO audit_log (user_id, username, event_type, details, ip_address, meta)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    entry.userId,
+    entry.username,
+    entry.eventType,
+    entry.details,
+    entry.ipAddress,
+    entry.meta,
+  );
 }

@@ -1,0 +1,21 @@
+[Unit]
+Description=Caddy Reverse Proxy for LLM Agent
+After=llm-agent-app.service
+Requires=llm-agent-app.service
+
+[Container]
+Image=localhost/llm-agent-caddy:latest
+Network=llm-agent.network
+Volume=llm-agent-caddy-data.volume:/data
+PublishPort=80:80
+PublishPort=443:443
+
+# Security hardening
+ReadOnly=true
+DropCapability=ALL
+NoNewPrivileges=true
+Tmpfs=/tmp
+Tmpfs=/config
+
+[Install]
+WantedBy=default.target

@@ -1,18 +1,18 @@
 "use server";
 
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 
-let _db: Database.Database | null = null;
+let _db: Database | null = null;
 
-function getDb(): Database.Database {
+function getDb(): Database {
   if (!_db) {
     const dbPath = process.env.DATABASE_PATH;
     if (!dbPath) {
       throw new Error("DATABASE_PATH environment variable is not set");
     }
     _db = new Database(dbPath);
-    _db.pragma("journal_mode = WAL");
-    _db.pragma("foreign_keys = ON");
+    _db.run("PRAGMA journal_mode = WAL;");
+    _db.run("PRAGMA foreign_keys = ON;");
     initSchema(_db);
   }
   return _db;
@@ -23,8 +23,8 @@ function getDb(): Database.Database {
  * This is the SQLite equivalent of the PostgreSQL schema that was
  * previously spread across auth.*, bunnings.*, and field_ops.* schemas.
  */
-function initSchema(db: Database.Database) {
-  db.exec(`
+function initSchema(db: Database) {
+  db.run(`
     CREATE TABLE IF NOT EXISTS user_credentials (
       user_id    TEXT PRIMARY KEY,
       username   TEXT UNIQUE NOT NULL,
@@ -64,7 +64,7 @@ export function executeAuthQuery<T>(
 ): T[] {
   "use server";
   const db = getDb();
-  const stmt = db.prepare(sql);
+  const stmt = db.query(sql);
   return stmt.all(...params) as T[];
 }
 
@@ -77,7 +77,7 @@ export function executeAuthQueryOne<T>(
 ): T | undefined {
   "use server";
   const db = getDb();
-  const stmt = db.prepare(sql);
+  const stmt = db.query(sql);
   return stmt.get(...params) as T | undefined;
 }
 
@@ -87,9 +87,9 @@ export function executeAuthQueryOne<T>(
 export function executeRun(
   sql: string,
   params: unknown[] = [],
-): Database.RunResult {
+): { lastInsertRowid: number; changes: number } {
   "use server";
   const db = getDb();
-  const stmt = db.prepare(sql);
+  const stmt = db.query(sql);
   return stmt.run(...params);
 }

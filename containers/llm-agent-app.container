@@ -1,0 +1,29 @@
+[Unit]
+Description=LLM Agent Application
+After=llm-agent-data-volume.service
+Requires=llm-agent-data-volume.service
+
+[Container]
+Image=localhost/llm-agent:latest
+Network=llm-agent.network
+Volume=llm-agent-data.volume:/app/data
+PodmanArgs=--network-alias=app
+
+# Secrets (created via podman secret create)
+Secret=llm-agent-session-secret,type=env,target=SESSION_SECRET
+Secret=llm-agent-openai-api-key,type=env,target=OPENAI_API_KEY
+
+# Environment
+Environment=DATABASE_PATH=./data/app.db
+Environment=RAW_DOC_PATH=./data/Product Disclosure Statement (PDS).docx
+Environment=PORT=3075
+Environment=NODE_ENV=production
+
+# Security hardening
+ReadOnly=true
+DropCapability=ALL
+NoNewPrivileges=true
+Tmpfs=/tmp
+
+[Install]
+WantedBy=default.target

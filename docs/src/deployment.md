@@ -76,13 +76,71 @@ Requirements:
 - `docker-compose.production.yml` uses `image: llm-agent:latest` and `build:` for `app`.
 - `pull_policy: never` prevents accidental registry pulls.
 
+## Production (Podman Quadlets)
+
+Production uses Podman Quadlet unit files instead of docker-compose. Quadlet files live in `containers/` and get installed as systemd user units.
+
+### Architecture
+
+- **llm-agent-app** — Bun application (not published to host)
+- **llm-agent-caddy** — Caddy reverse proxy (ports 80/443)
+- **llm-agent-data** — persistent volume for SQLite + documents
+- **llm-agent-caddy-data** — persistent volume for Caddy TLS certs
+- **llm-agent** — shared network for app/caddy communication
+
+Secrets (`SESSION_SECRET`, `OPENAI_API_KEY`) are stored via `podman secret` and never touch the filesystem.
+
+### Full Deploy
+
+```bash
+just deploy
+```
+
+This runs: `deploy-secrets` → `deploy-build` → `deploy-install` → `deploy-down` → `deploy-up`.
+
+### Individual Steps
+
+```bash
+# Create/update secrets from server .env
+just deploy-secrets
+
+# Build images
+just deploy-build
+
+# Install quadlet files + reload systemd
+just deploy-install
+
+# Start/stop
+just deploy-up
+just deploy-down
+```
+
+### User Management
+
+```bash
+just podman-manage-users create-user <name>
+just podman-manage-users update-password
+just podman-manage-users delete-user
+```
+
+### Security Hardening
+
+All containers run with:
+- `ReadOnly=true` — read-only root filesystem
+- `DropCapability=ALL` — all Linux capabilities dropped
+- `NoNewPrivileges=true` — no privilege escalation
+- Non-root user (UID 1001)
+- Network isolation (app only reachable via Caddy)
+
 ## Useful Commands
 
 | Command        | Description                        |
 |----------------|------------------------------------|
-| `just up`      | Typecheck + build + deploy         |
-| `just down`    | Stop containers                    |
-| `just rebuild` | Stop + rebuild + restart           |
-| `just build`   | Docker build only                  |
-| `just prod-image-build` | Build `llm-agent:latest` from `Dockerfile.production` |
-| `just prod-up` | Start production compose stack     |
+| `just up`      | Typecheck + build + deploy (dev)   |
+| `just down`    | Stop dev containers                |
+| `just rebuild` | Stop + rebuild + restart (dev)     |
+| `just deploy`  | Full production deployment         |
+| `just deploy-build` | Build production images       |
+| `just deploy-up` | Start production services        |
+| `just deploy-down` | Stop production services       |
+| `just podman-manage-users` | Manage users against production DB |

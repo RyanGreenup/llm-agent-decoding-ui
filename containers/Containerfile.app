@@ -1,11 +1,11 @@
 # =============================================================================
-# Production Hardened Dockerfile
+# Production Hardened Containerfile
 # =============================================================================
-# Build: docker build -f Dockerfile.production -t llm-agent:latest .
+# Build: podman build -f containers/Containerfile.app -t llm-agent:latest .
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Dependencies (cached layer – production only)
+# Stage 1: Dependencies (cached layer - production only)
 # -----------------------------------------------------------------------------
 FROM oven/bun:1 AS deps
 

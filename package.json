@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@chonkiejs/core": "^0.0.7",
+    "@inquirer/prompts": "^8.2.1",
     "@lancedb/lancedb": "^0.26.2",
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",
@@ -41,7 +42,6 @@
     "vinxi": "^0.5.7"
   },
   "devDependencies": {
-    "@inquirer/prompts": "^8.2.1",
     "@tailwindcss/vite": "^4.0.7",
     "@types/dompurify": "^3.2.0",
     "bun-types": "latest",

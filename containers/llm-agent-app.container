@@ -21,7 +21,6 @@ Environment=NODE_ENV=production
 
 # Security hardening
 ReadOnly=true
-DropCapability=ALL
 NoNewPrivileges=true
 Tmpfs=/tmp
 

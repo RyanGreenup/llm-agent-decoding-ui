@@ -56,7 +56,7 @@ RUN mkdir -p /app/data && chown appuser:appgroup /app/data
 # Bundle required seed document
 COPY --chown=appuser:appgroup ["data/Product Disclosure Statement (PDS).docx", "/app/data/Product Disclosure Statement (PDS).docx"]
 
-# Copy production dependencies
+# Copy production dependencies (bcrypt)
 COPY --from=deps --chown=appuser:appgroup /app/node_modules ./node_modules
 
 # Copy built application (Vinxi/SolidStart outputs to .output/)
@@ -64,8 +64,8 @@ COPY --from=builder --chown=appuser:appgroup /app/.output ./.output
 COPY --from=builder --chown=appuser:appgroup /app/package.json ./
 
 # Management scripts (for `podman exec` user admin)
-COPY --from=builder --chown=appuser:appgroup /app/scripts ./scripts
-COPY --from=builder --chown=appuser:appgroup /app/src/lib ./src/lib
+COPY --chown=appuser:appgroup scripts ./scripts
+COPY --chown=appuser:appgroup src/lib ./src/lib
 COPY --from=builder --chown=appuser:appgroup /app/tsconfig.json ./
 
 ENV NODE_ENV=production

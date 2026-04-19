@@ -11,7 +11,7 @@ async function run(): Promise<void> {
   }
   await $`bun install`;
   await $`bun --bun run build`;
-  await $`bun --bun .output/server/index.mjs`;
+  await $`HOST=0.0.0.0 bun --bun .output/server/index.mjs`;
 }
 
 run();

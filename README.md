@@ -2,6 +2,9 @@
 
 ## Getting Started
 
+> [!NOTE]
+> Hosted at [examples.llm.pds.ryangreenup.com.au](https://examples.llm.pds.ryangreenup.com.au/login)
+
 ### Prerequisites
 
 - [Bun](https://bun.sh) ≥ 1.3

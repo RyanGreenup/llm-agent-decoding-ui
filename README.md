@@ -19,6 +19,7 @@ Edit `.env` and fill in:
 | Variable | Description |
 |---|---|
 | `SESSION_SECRET` | Min 32-char random string — generate with `openssl rand -base64 32` |
+| `ADMIN_PASSWORD` | Initial admin password. If unset, a random one is generated and printed to stdout on first run. |
 | `OPENAI_API_KEY` | Required for the LLM features |
 | `PORT` | Pre-set to `3075` — change if needed |
 | `DATABASE_PATH` | Pre-set to `./data/app.db` |

@@ -4,6 +4,7 @@ import {
   type ChatMessage,
 } from "~/lib/chat/stuffed-chat";
 import type { StuffedChatTraceEvent } from "~/lib/chat/stuffed-chat-auditing";
+import { chatLog } from "~/lib/logger";
 
 type ChatStreamRequest = {
   question?: string;
@@ -45,12 +46,19 @@ export async function POST(event: any) {
     : [];
   const model = typeof payload.model === "string" ? payload.model : undefined;
   const documentPath = await getRawDocPath();
+  chatLog.info("chat_stream.request", { question: question.slice(0, 120), historyCount: history.length, model: model ?? "default" });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let closed = false;
       const writeEvent = (event: StreamEvent) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          closed = true;
+        }
       };
       try {
         const result = await stuffedChatStreamWithTrace(
@@ -61,15 +69,22 @@ export async function POST(event: any) {
           (traceEvent) => writeEvent({ type: "trace", event: traceEvent }),
           model,
         );
-        console.info("RAG_CHAT_TRACE", JSON.stringify(result.trace));
+        chatLog.info("chat_stream.trace", {
+          model: result.trace.model,
+          durationMs: Math.round(result.trace.totalDurationMs),
+          totalTokens: result.trace.totalUsage.totalTokens,
+          toolCalls: result.trace.toolCalls.length,
+          rounds: result.trace.rounds.length,
+        });
       } catch (error) {
-        console.error("chat stream failed:", error);
+        chatLog.error("chat_stream.error", { err: error instanceof Error ? error.message : String(error) });
         writeEvent({
           type: "error",
           message: "I hit an error while streaming the response.",
         });
       } finally {
-        controller.close();
+        closed = true;
+        try { controller.close(); } catch { /* already closed by client disconnect */ }
       }
     },
   });

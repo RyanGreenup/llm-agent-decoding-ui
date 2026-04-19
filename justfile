@@ -93,7 +93,7 @@ deploy-secrets:
 
 # Build container images
 deploy-build:
-    podman build -f containers/Containerfile.app -t llm-agent:latest .
+    podman build -f containers/Dockerfile -t llm-agent:latest .
     podman build -f containers/Containerfile.caddy -t llm-agent-caddy:latest .
 
 # Install quadlet files and reload systemd

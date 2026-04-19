@@ -1,32 +1,81 @@
-# SolidStart
+# Structured Decoding Example
 
-Everything you need to build a Solid project, powered by [`solid-start`](https://start.solidjs.com);
+## Getting Started
 
-## Creating a project
+### Prerequisites
 
-```bash
-# create a new project in the current directory
-npm init solid@latest
+- [Bun](https://bun.sh) ≥ 1.3
+- [Podman](https://podman.io) + `podman-compose` (for container workflow)
+- [just](https://github.com/casey/just)
 
-# create a new project in my-app
-npm init solid@latest my-app
+### Environment
+
+```sh
+cp .env.example .env
 ```
 
-## Developing
+Edit `.env` and fill in:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+| Variable | Description |
+|---|---|
+| `SESSION_SECRET` | Min 32-char random string — generate with `openssl rand -base64 32` |
+| `OPENAI_API_KEY` | Required for the LLM features |
+| `PORT` | Pre-set to `3075` — change if needed |
+| `DATABASE_PATH` | Pre-set to `./data/app.db` |
 
-```bash
-npm run dev
+---
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+### Option A — Podman (recommended)
+
+```sh
+just up
 ```
 
-## Building
+Then seed the database and get the admin password:
 
-Solid apps are built with _presets_, which optimise your project for deployment to different environments.
+```sh
+just compose-init-db
+```
 
-By default, `npm run build` will generate a Node app that you can run with `npm start`. To use a different preset, add it to the `devDependencies` in `package.json` and specify in your `app.config.js`.
+```
+╔══════════════════════════════════════════════════╗
+║  Default admin account created                   ║
+║  Username: admin                                 ║
+║  Password: <generated>                           ║
+║                                                  ║
+║  Change this password after first login.         ║
+╚══════════════════════════════════════════════════╝
+```
 
-## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)
+Open http://localhost:3075 and log in.
+
+---
+
+### Option B — Bun dev server
+
+```sh
+just init-db
+```
+
+This creates `./data/app.db` and prints the admin credentials (only on first run).
+
+```sh
+bun --bun run dev
+```
+
+Open http://localhost:3000.
+
+---
+
+## User Management
+
+```sh
+# Local dev
+just manage-users create-user <username>
+just manage-users update-password
+just manage-users delete-user
+
+# Running compose container
+podman exec llm-agent-decoding-ui_app_1 \
+    bun run scripts/manage_users.ts update-password
+```

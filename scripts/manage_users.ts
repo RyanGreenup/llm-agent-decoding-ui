@@ -13,6 +13,7 @@ import { Database } from "bun:sqlite";
 import { confirm, select } from "@inquirer/prompts";
 import crypto from "node:crypto";
 import { hashPassword } from "~/lib/auth/hash";
+import { initDatabase } from "../src/lib/db/init";
 
 const DEFAULT_ROLE = "viewer";
 
@@ -25,6 +26,7 @@ function getDb(): Database {
   const db = new Database(dbPath);
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
+  initDatabase(db);
   return db;
 }
 

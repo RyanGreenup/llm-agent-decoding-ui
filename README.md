@@ -5,66 +5,77 @@
 ### Prerequisites
 
 - [Bun](https://bun.sh) ≥ 1.3
+- [mise](https://mise.jdx.dev)
+  - [sops](https://github.com/getsops/sops)
+  - [age](https://github.com/FiloSottile/age)
 - [Podman](https://podman.io) + `podman-compose` (for container workflow)
 - [just](https://github.com/casey/just)
 
 ### Environment
 
+Secrets are stored encrypted in `.env.yaml` (managed by sops + age).
+See `.env.example.yaml` for the required variables:
+
+| Variable         | Description                                  |
+| ---------------- | -------------------------------------------- |
+| `SESSION_SECRET` | 32-char generate with `openssl rand -hex 32` |
+| `ADMIN_PASSWORD` | Initial admin password. [^1]                 |
+| `OPENAI_API_KEY` | Required for the LLM features                |
+| `PORT`           | Default `3075`                               |
+| `DATABASE_PATH`  | Default `./data/app.db`                      |
+
+Create and encrypt your own `.env.yaml`:
+
 ```sh
-cp .env.example .env
+cp .env.example.yaml .env.yaml
+# edit .env.yaml with real values, then encrypt:
+sops encrypt --in-place .env.yaml
 ```
 
-Edit `.env` and fill in:
-
-| Variable | Description |
-|---|---|
-| `SESSION_SECRET` | Min 32-char random string — generate with `openssl rand -base64 32` |
-| `ADMIN_PASSWORD` | Initial admin password. If unset, a random one is generated and printed to stdout on first run. |
-| `OPENAI_API_KEY` | Required for the LLM features |
-| `PORT` | Pre-set to `3075` — change if needed |
-| `DATABASE_PATH` | Pre-set to `./data/app.db` |
+mise automatically decrypts and loads `.env.yaml` into your shell and
+all `just` and `bun` commands inherit the vars from there.
 
 ---
 
-### Option A — Podman (recommended)
+### Podman
 
 ```sh
 just up
-```
-
-Then seed the database and get the admin password:
-
-```sh
 just compose-init-db
 ```
 
-```
+```example
 ╔══════════════════════════════════════════════════╗
 ║  Default admin account created                   ║
 ║  Username: admin                                 ║
-║  Password: <generated>                           ║
+║  Password: <from ADMIN_PASSWORD or generated>    ║
 ║                                                  ║
 ║  Change this password after first login.         ║
 ╚══════════════════════════════════════════════════╝
 ```
 
-Open http://localhost:3075 and log in.
+Open <http://localhost:3075> and log in.
 
 ---
 
-### Option B — Bun dev server
+### Bun dev server
+
+> [!NOTE]
+> For debugging e.g.:
+
+```sh
+rm -r data/app.db data/app.db-shm data/app.db-shm
+bun install &&
+  bun --bun run build &&
+  bun --bun .output/server/index.mjs
+```
 
 ```sh
 just init-db
-```
-
-This creates `./data/app.db` and prints the admin credentials (only on first run).
-
-```sh
 bun --bun run dev
 ```
 
-Open http://localhost:3000.
+Open <http://localhost:3000>.
 
 ---
 
@@ -80,3 +91,5 @@ just manage-users delete-user
 podman exec llm-agent-decoding-ui_app_1 \
     bun run scripts/manage_users.ts update-password
 ```
+
+[^1]: If unset, a random one is generated and printed to stdout on first run.

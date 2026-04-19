@@ -14,6 +14,7 @@ import {
   getSession as getExtractionSession,
   deleteSession,
 } from "./session";
+import { extractLog } from "~/lib/logger";
 import type {
   ExtractionResult,
   ExtractionRound,
@@ -69,7 +70,8 @@ export type ContinueExtractionResult = {
  */
 export async function startExtraction(): Promise<StartExtractionResult> {
   "use server";
-  await requireUser();
+  const user = await requireUser();
+  extractLog.info("extraction.start", { userId: user.id, username: user.username });
 
   const path = await getRawDocPath();
   const markdown = await readDocument(path);
@@ -92,6 +94,14 @@ export async function startExtraction(): Promise<StartExtractionResult> {
 
   const rounds = [result.round];
   const trace = buildTrace(rounds, pipelineStart);
+
+  extractLog.info("extraction.round.done", {
+    round: 0,
+    role: "initial_extraction",
+    passed: result.round.passed,
+    durationMs: Math.round(result.round.durationMs),
+    tokens: result.round.usage?.totalTokens ?? null,
+  });
 
   // Store session so the client can call continueExtraction
   const sessionId = createSession(markdown, messages);
@@ -152,6 +162,16 @@ export async function continueExtraction(
   const done = result.round.passed;
   const trace = buildTrace([result.round], pipelineStart);
 
+  extractLog.info("extraction.round.done", {
+    round: reflectionIndex,
+    role: "reflection",
+    passed: result.round.passed,
+    durationMs: Math.round(result.round.durationMs),
+    tokens: result.round.usage?.totalTokens ?? null,
+    sessionId,
+    done,
+  });
+
   if (done) {
     deleteSession(sessionId);
   }
@@ -192,7 +212,15 @@ export async function extractPdsData(
     rounds.push(result.round);
   }
 
-  return { data: result.parsed, trace: buildTrace(rounds, pipelineStart) };
+  const trace = buildTrace(rounds, pipelineStart);
+  extractLog.info("extraction.pipeline.done", {
+    rounds: rounds.length,
+    finalPassed: trace.finalPassed,
+    reflectionCount: trace.reflectionCount,
+    totalTokens: trace.totalUsage.totalTokens,
+    totalDurationMs: Math.round(trace.totalDurationMs),
+  });
+  return { data: result.parsed, trace };
 }
 
 // ── Pipeline steps ──────────────────────────────────────────────

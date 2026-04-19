@@ -1,6 +1,7 @@
 "use server";
 
 import { insertAuditLog } from "./db/sqlite";
+import { auditLog } from "./logger";
 
 type AuditEvent = {
   userId?: string;
@@ -32,6 +33,6 @@ export function logAuditEvent(event: AuditEvent): void {
       meta: event.meta ? JSON.stringify(event.meta) : null,
     });
   } catch (err) {
-    console.error("Audit log insert failed:", err);
+    auditLog.error("audit.insert_failed", { err: err instanceof Error ? err.message : String(err), eventType: event.eventType, username: event.username });
   }
 }

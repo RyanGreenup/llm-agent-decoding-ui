@@ -3,6 +3,7 @@ import type { Accessor } from "solid-js";
 import { getRequestEvent } from "solid-js/web";
 import { getEvent, getRequestIP } from "vinxi/http";
 import { logAuditEvent } from "~/lib/audit";
+import { authLog } from "~/lib/logger";
 import { findUserById } from "./db";
 import {
   checkLoginRateLimit,
@@ -83,6 +84,7 @@ export const getAdminUser = query(async () => {
     const event = getRequestEvent();
     if (event) event.response.status = 403;
     const ip = getRequestIP(getEvent(), { xForwardedFor: true }) ?? "unknown";
+    authLog.warn("auth.admin_denied", { username: user.username, userId: user.id, role: user.role ?? "none", ip });
     logAuditEvent({
       userId: user.id,
       username: user.username,
@@ -127,6 +129,7 @@ export const login = action(async (formData: FormData) => {
 
   const { blocked, retrySecs } = await checkLoginRateLimit(ip, username);
   if (blocked) {
+    authLog.warn("auth.rate_limited", { username, ip, retrySecs });
     return new Error(
       `Too many login attempts. Please try again in ${Math.ceil(retrySecs / 60)} minute(s).`,
     );
@@ -141,6 +144,7 @@ export const login = action(async (formData: FormData) => {
       d.clientId = clientId;
     });
     await resetOnSuccess(ip, username);
+    authLog.info("auth.login", { username, userId: user.id, ip });
     logAuditEvent({
       userId: user.id,
       username,
@@ -152,6 +156,7 @@ export const login = action(async (formData: FormData) => {
     await penalizeFailedLogin(ip, username);
     const isUnknownUserAttempt =
       err instanceof LoginFailureError && err.reason === "user_not_found";
+    authLog.warn("auth.login_failed", { username, ip, reason: isUnknownUserAttempt ? "user_not_found" : "invalid_password" });
     logAuditEvent({
       username,
       eventType: isUnknownUserAttempt
@@ -171,6 +176,7 @@ export const logout = action(async () => {
   "use server";
   const user = await requireUser();
   const ip = getRequestIP(getEvent(), { xForwardedFor: true }) ?? "unknown";
+  authLog.info("auth.logout", { username: user.username, userId: user.id, ip });
   logAuditEvent({
     userId: user.id,
     username: user.username,

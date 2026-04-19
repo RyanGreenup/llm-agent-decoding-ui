@@ -7,6 +7,7 @@ import { _split_document, rag_chat } from "~/lib/chat/openai_rag";
 import { VectorStore } from "~/lib/chunking/vector_store_lancedb";
 import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
 import { requireUser } from "~/lib/auth";
+import { ragLog } from "~/lib/logger";
 
 type RagSession = {
   id: string;
@@ -96,6 +97,7 @@ async function indexFiles(
     const metadatas = chunks.map(() => ({ source: file.name }));
     await session.store.add_texts(chunks, metadatas, "openai");
     session.documentCount += 1;
+    ragLog.info("rag.indexed", { file: file.name, chunks: chunks.length, sessionId: session.id });
   }
 }
 
@@ -130,6 +132,7 @@ export async function POST(event: any) {
   try {
     const user = await requireUser();
     const form = await event.request.formData();
+    const t0 = performance.now();
 
     const question = String(form.get("question") ?? "").trim();
     const sessionIdRaw = String(form.get("sessionId") ?? "").trim();
@@ -140,6 +143,14 @@ export async function POST(event: any) {
       .filter((entry: FormDataEntryValue): entry is File => entry instanceof File);
 
     const session = getOrCreateSession(sessionIdRaw || undefined, user.id);
+    ragLog.info("rag.request", {
+      userId: user.id,
+      username: user.username,
+      sessionId: session.id,
+      fileCount: files.length,
+      question: question ? question.slice(0, 120) : null,
+      model: model ?? "default",
+    });
 
     if (files.length > 0) {
       await indexFiles(session, files);
@@ -165,6 +176,11 @@ export async function POST(event: any) {
     });
 
     session.updatedAt = Date.now();
+    ragLog.info("rag.answer", {
+      sessionId: session.id,
+      durationMs: Math.round(performance.now() - t0),
+      answerPreview: answer.slice(0, 120),
+    });
 
     return json({
       sessionId: session.id,
@@ -172,6 +188,7 @@ export async function POST(event: any) {
       answer,
     });
   } catch (error) {
+    ragLog.error("rag.error", { err: error instanceof Error ? error.message : String(error) });
     const message = error instanceof Error ? error.message : String(error);
     return new Response(message, { status: 400 });
   }

@@ -1,6 +1,7 @@
 import { DEFAULT_MODEL_ID } from "../config";
 import { Providers } from "../openai_provider";
 import { chat } from "../openai_chat";
+import { ragLog } from "../logger";
 import { type ChunkResult, select_chunks } from "../chunking/chunk_selection";
 import { embed } from "../chunking/openai_embeddings";
 import { VectorStore } from "../chunking/vector_store_lancedb";
@@ -84,7 +85,7 @@ export async function _split_document(
       .filter((text: string) => text.trim().length > 0);
     return texts.length > 0 ? texts : [document];
   } catch (e) {
-    console.warn("_split_document: chunking failed, using whole document:", e);
+    ragLog.warn("rag.chunk_failed", { err: e instanceof Error ? e.message : String(e) });
     return [document];
   }
 }

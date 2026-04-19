@@ -7,6 +7,7 @@
 import { Database } from "bun:sqlite";
 import bcrypt from "bcrypt";
 import crypto from "node:crypto";
+import { dbLog } from "~/lib/logger";
 
 export function initDatabase(db: Database) {
   db.run(`
@@ -83,7 +84,9 @@ function seedDefaultAdmin(db: Database) {
     [userId, username, "user_created", "Auto-seeded admin user on first run"],
   );
 
-  console.log(`
+  dbLog.info("db.admin_seeded", { username, note: "change password after first login" });
+  // Also print the banner so the password is visible in plain logs/k9s
+  process.stdout.write(`
 ╔══════════════════════════════════════════════════╗
 ║  Default admin account created                   ║
 ║  Username: ${username.padEnd(38)}║
@@ -91,5 +94,5 @@ function seedDefaultAdmin(db: Database) {
 ║                                                  ║
 ║  Change this password after first login.         ║
 ╚══════════════════════════════════════════════════╝
-`);
+\n`);
 }

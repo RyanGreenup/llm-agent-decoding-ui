@@ -7,6 +7,7 @@ import { DEFAULT_MODEL_ID } from "~/lib/config";
 import { readDocument } from "~/lib/dataCleaning/convert_to_markdown";
 import { extractPdsData } from "~/lib/extraction/extract-pds";
 import { getOpenAIClient } from "~/lib/openai/server";
+import { chatLog } from "~/lib/logger";
 import type { PdsData } from "~/lib/extraction/pds-schema";
 import { getModels } from "~/lib/models";
 import {
@@ -135,7 +136,7 @@ function buildTools(
             });
             return serialized;
           } catch (e) {
-            console.error("extract_pds_data failed:", e);
+            chatLog.error("chat.tool.error", { tool: "extract_pds_data", err: e instanceof Error ? e.message : String(e) });
             const serialized = JSON.stringify({ error: "Failed to extract document data." });
             const preview = toToolPreview(serialized);
             audit.onToolCall({
@@ -188,7 +189,7 @@ function buildTools(
             });
             return serialized;
           } catch (e) {
-            console.error("get_models failed:", e);
+            chatLog.error("chat.tool.error", { tool: "get_models", err: e instanceof Error ? e.message : String(e) });
             const serialized = JSON.stringify({ error: "Failed to retrieve models." });
             const preview = toToolPreview(serialized);
             audit.onToolCall({
@@ -226,6 +227,12 @@ async function runStuffedChat(
   const selectedModel = options?.model || DEFAULT_MODEL_ID;
   const started = performance.now();
   const startedAt = new Date().toISOString();
+  chatLog.info("chat.start", {
+    model: selectedModel,
+    question: question.slice(0, 120),
+    historyCount: history.length,
+    documentChars: text.length,
+  });
   const trace = createTrace({
     question,
     documentPath,
@@ -332,10 +339,22 @@ async function runStuffedChat(
       selectedModel,
       startedMs: started,
     });
+    chatLog.info("chat.done", {
+      model: selectedModel,
+      durationMs: Math.round(performance.now() - started),
+      toolCalls: trace.toolCalls.length,
+      rounds: trace.rounds.length,
+      totalTokens: trace.totalUsage.totalTokens,
+    });
     options?.onTraceEvent?.({ type: "trace_completed", trace: { ...trace } });
     return { content, trace };
   } catch (error) {
     finalizeTraceError({ trace, error, startedMs: started });
+    chatLog.error("chat.error", {
+      err: error instanceof Error ? error.message : String(error),
+      model: selectedModel,
+      durationMs: Math.round(performance.now() - started),
+    });
     options?.onTraceEvent?.({
       type: "trace_error",
       error: error instanceof Error ? error.message : String(error),

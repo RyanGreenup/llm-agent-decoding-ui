@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { fileTypeFromFile } from "file-type";
 import { MarkItDown } from "markitdown-ts";
 import * as prettier from "prettier";
+import { docLog } from "~/lib/logger";
 
 const _MARKITDOWN_SUFFIXES = new Set([
   ".docx",
@@ -25,28 +26,30 @@ async function _warn_if_magic_mismatch(
   const declared = extname(path).slice(1).toLowerCase();
   const detected = kind.ext.toLowerCase();
   if (declared && declared !== detected) {
-    console.error(
-      `Warning: '${basename(
-        path,
-      )}' has extension .${declared} but magic bytes indicate .${detected}`,
-    );
+    docLog.warn("doc.magic_mismatch", { path: basename(path), declared, detected });
   }
   return `.${detected}`;
 }
 
 export async function read_document(path: string): Promise<string> {
   "use server";
+  const t0 = performance.now();
+  docLog.debug("doc.read.start", { path });
   const detected_suffix = await _warn_if_magic_mismatch(path);
+  let result: string;
   if (detected_suffix) {
     if (_MARKITDOWN_SUFFIXES.has(detected_suffix)) {
-      return await convert_to_markdown(path);
+      result = await convert_to_markdown(path);
+    } else {
+      result = await readFile(path, "utf8");
     }
-    return await readFile(path, "utf8");
+  } else if (_MARKITDOWN_SUFFIXES.has(extname(path).toLowerCase())) {
+    result = await convert_to_markdown(path);
+  } else {
+    result = await readFile(path, "utf8");
   }
-  if (_MARKITDOWN_SUFFIXES.has(extname(path).toLowerCase())) {
-    return await convert_to_markdown(path);
-  }
-  return await readFile(path, "utf8");
+  docLog.debug("doc.read.done", { path, chars: result.length, durationMs: Math.round(performance.now() - t0) });
+  return result;
 }
 
 export async function convert_to_markdown(

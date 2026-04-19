@@ -2,6 +2,7 @@
 
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
+import { secretsLog } from "./logger";
 
 type Secrets = {
   sessionSecret: string;
@@ -18,6 +19,7 @@ export function getSecrets(): Secrets {
     cached = {
       sessionSecret: readFileSync("/run/secrets/session_secret", "utf8").trim(),
     };
+    secretsLog.debug("secrets.loaded", { source: "podman" });
     return cached;
   }
 
@@ -32,9 +34,10 @@ export function getSecrets(): Secrets {
       cached = {
         sessionSecret: decrypt("session_secret"),
       };
+      secretsLog.debug("secrets.loaded", { source: "sops" });
       return cached;
     } catch (e) {
-      console.warn("Failed to decrypt sops files:", e);
+      secretsLog.warn("secrets.sops_failed", { err: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -48,6 +51,7 @@ export function getSecrets(): Secrets {
     );
   }
   cached = { sessionSecret };
+  secretsLog.debug("secrets.loaded", { source: "env" });
   return cached;
 }
 

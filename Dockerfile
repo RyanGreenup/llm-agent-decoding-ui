@@ -1,12 +1,14 @@
-FROM node:22-slim AS base
-RUN apt-get update && apt-get install -y pandoc && rm -rf /var/lib/apt/lists/*
+FROM oven/bun:1
+
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm ci
+RUN apt-get update && apt-get install -y --no-install-recommends pandoc && rm -rf /var/lib/apt/lists/*
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN bun --bun run build
 
 EXPOSE 3075
-CMD ["npm", "run", "start"]
+CMD ["bun", "--bun", "run", ".output/server/index.mjs"]

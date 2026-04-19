@@ -58,8 +58,9 @@ export function initDatabase(db: Database) {
 }
 
 /**
- * If no users exist, create a default admin with a random password
- * and print the credentials to stdout exactly once.
+ * If no users exist, create a default admin.
+ * Uses ADMIN_PASSWORD env var if set, otherwise generates a random password.
+ * Prints credentials to stdout exactly once.
  */
 function seedDefaultAdmin(db: Database) {
   const row = db.query("SELECT COUNT(*) AS cnt FROM user_credentials").get() as {
@@ -69,7 +70,7 @@ function seedDefaultAdmin(db: Database) {
 
   const userId = crypto.randomUUID();
   const username = "admin";
-  const password = crypto.randomBytes(32).toString("base64url");
+  const password = process.env.ADMIN_PASSWORD ?? crypto.randomBytes(32).toString("base64url");
   const passwordHash = bcrypt.hashSync(password, 12);
 
   db.run(

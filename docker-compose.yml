@@ -2,6 +2,11 @@ services:
   app:
     build: .
     ports:
-      - "3075:3075"
-    env_file:
-      - .env
+      - "${PORT:-3075}:${PORT:-3075}"
+    environment:
+      PORT: ${PORT:-3075}
+      DATABASE_PATH: ${DATABASE_PATH:-./data/app.db}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RAW_DOC_PATH: ${RAW_DOC_PATH:-./data/Product Disclosure Statement (PDS).docx}

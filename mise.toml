@@ -1,0 +1,10 @@
+[settings]
+sops.rops = false # Use the real sops CLI instead of mise's builtin Rust parser
+
+
+[env]
+'_'.file = { path = ".env.yaml" }
+
+[tools]
+age = "latest"
+sops = "latest"

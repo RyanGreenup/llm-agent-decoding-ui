@@ -1,0 +1,24 @@
+creation_rules:
+  - path_regex: \.env.yaml$
+    # ryan Personal creds (age keypair + ssh-ed25519)
+    age: >-
+      age1akugayf5a9uw432mtvh9zlw7vz93j0te2f9frtkar8uwmlfl54lsjelvar,
+      age1ahrtjay3f9u72y6wsrgca4xkrev7xcd9azrg39lc2m2vpfk9mussgk4092,
+
+# x-notes:
+#   notes:
+#     cluster:
+#       - cmd: kubectl get secrets -n flux-system sops-age -o yaml | yq '.data."age.agekey"' | base64 -d | age-keygen -y -
+#   creds:
+#     x-ryan:
+#       - age: age1akugayf5a9uw432mtvh9zlw7vz93j0te2f9frtkar8uwmlfl54lsjelvar
+#     x-shai:
+#       - age: age1ahrtjay3f9u72y6wsrgca4xkrev7xcd9azrg39lc2m2vpfk9mussgk4092
+#     x-ian:
+#       - age: age1hsk8s90fhjefn07lym4wqhhdcs9md9svs9nlz7ruspjweu5ftv5qqd9jhd
+#     cluster-doks:
+#       - age: age1hu7gu2gspfe7dqlllerk9kl2and0f9pphv8jkaj2r2fgkdnspq7qtzanwz
+#     cluster-vale:
+#       - age: age1hu7gu2gspfe7dqlllerk9kl2and0f9pphv8jkaj2r2fgkdnspq7qtzanwz
+#
+

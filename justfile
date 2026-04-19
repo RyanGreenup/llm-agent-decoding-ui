@@ -7,13 +7,13 @@ dev: init
     bun --bun run dev --host
 
 build:
-    docker compose build
+    podman-compose build
 
 down:
-    docker compose down
+    podman-compose down
 
 up-only:
-    docker compose up -d
+    podman-compose up -d
 
 check: init
     bunx tsc --noEmit
@@ -34,27 +34,35 @@ prod-image-build:
     docker build -f Dockerfile.production -t llm-agent:latest .
 
 prod-build:
-    docker compose -f docker-compose.production.yml build
+    podman-compose -f docker-compose.production.yml build
 
 prod-build-no-cache:
-    docker compose -f docker-compose.production.yml build --no-cache
+    podman-compose -f docker-compose.production.yml build --no-cache
 
 
 prod-up:
-    docker compose -f docker-compose.production.yml up -d
-    docker compose -f docker-compose.production.yml cp \
+    podman-compose -f docker-compose.production.yml up -d
+    podman-compose -f docker-compose.production.yml cp \
         "data/Product Disclosure Statement (PDS).docx" \
         app:"/app/data/Product Disclosure Statement (PDS).docx"
 
 prod-seed-doc:
-    docker compose -f docker-compose.production.yml cp \
+    podman-compose -f docker-compose.production.yml cp \
         "data/Product Disclosure Statement (PDS).docx" \
         app:"/app/data/Product Disclosure Statement (PDS).docx"
 
 prod-down:
-    docker compose -f docker-compose.production.yml down
+    podman-compose -f docker-compose.production.yml down
 
 prod: prod-volume prod-build prod-down prod-up
+
+# Initialise local DB schema and seed default admin (prints password on first run)
+init-db:
+    bun run scripts/init-db.ts
+
+# Initialise DB inside the running compose container (prints password on first run)
+compose-init-db:
+    podman exec llm-agent-decoding-ui_app_1 bun run scripts/init-db.ts
 
 # User management (create-user <name>, update-password, delete-user)
 manage-users *ARGS:

@@ -15,7 +15,8 @@ type ChatStreamRequest = {
 type StreamEvent =
   | { type: "delta"; delta: string }
   | { type: "trace"; event: StuffedChatTraceEvent }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "ping" };
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
@@ -60,6 +61,9 @@ export async function POST(event: any) {
           closed = true;
         }
       };
+      // Prime the HTTP/2 stream immediately so Traefik doesn't reset it
+      // during the latency before the first token arrives from OpenAI.
+      writeEvent({ type: "ping" });
       try {
         const result = await stuffedChatStreamWithTrace(
           question,

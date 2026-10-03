@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vinxi dev",
-    "build": "vitest run tests/route-auth-guard.test.ts && vinxi build",
+    "build": "vitest run tests/route-auth-guard.test.ts tests/ssr-stream-disconnect.test.ts && vinxi build",
     "start": "vinxi start",
     "typecheck": "tsc --noEmit",
     "check:auth": "vitest run tests/route-auth-guard.test.ts"
@@ -13,7 +13,7 @@
     "@inquirer/prompts": "^8.2.1",
     "@lancedb/lancedb": "^0.26.2",
     "@solidjs/router": "^0.15.0",
-    "@solidjs/start": "^1.1.0",
+    "@solidjs/start": "1.3.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/bcrypt": "^6.0.0",
     "@types/katex": "^0.16.8",
@@ -35,7 +35,7 @@
     "openai": "^6.22.0",
     "prettier": "^3.8.1",
     "rate-limiter-flexible": "^9.1.1",
-    "solid-js": "^1.9.5",
+    "solid-js": "1.9.15",
     "solid-motionone": "^1.0.4",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
@@ -52,5 +52,8 @@
   },
   "engines": {
     "bun": ">=1"
+  },
+  "patchedDependencies": {
+    "@solidjs/start@1.3.2": "patches/@solidjs%2Fstart@1.3.2.patch"
   }
 }

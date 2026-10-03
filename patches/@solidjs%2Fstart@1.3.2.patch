@@ -1,0 +1,15 @@
+diff --git a/dist/server/handler.js b/dist/server/handler.js
+index 98f8f186aa6676ab0b1bc68af506313b4d76164e..16db41a56f7a95a27c60f09e920d0d311a2a6098 100644
+--- a/dist/server/handler.js
++++ b/dist/server/handler.js
+@@ -91,7 +91,9 @@ export function createBaseHandler(fn, createPageEvent, options = {}, routerLoad)
+                     return stream;
+                 // fix cloudflare streaming
+                 const { writable, readable } = new TransformStream();
+-                stream.pipeTo(writable);
++                stream.pipeTo(writable).catch(() => {
++                    // The response body may be cancelled when its client disconnects.
++                });
+                 return readable;
+             });
+         }

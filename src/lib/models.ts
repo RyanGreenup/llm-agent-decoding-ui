@@ -14,9 +14,6 @@ export interface Model {
 export const getModels = query(async (): Promise<Model[]> => {
   "use server";
 
-  // Simulate latency from a real data source
-  await new Promise((r) => setTimeout(r, 800));
-
   return [
     { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", contextWindow: 128_000, inputPrice: 2.50, outputPrice: 10.00, reviewStatus: "pass", reviewNote: "Reliable general-purpose model" },
     { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", contextWindow: 128_000, inputPrice: 0.15, outputPrice: 0.60, reviewStatus: "pass" },

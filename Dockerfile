@@ -5,7 +5,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends pandoc && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock* ./
-COPY patches ./patches
 RUN bun install --frozen-lockfile
 
 COPY . .

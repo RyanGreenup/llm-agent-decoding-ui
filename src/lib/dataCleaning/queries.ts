@@ -1,5 +1,3 @@
-"use server";
-
 import { action, query } from "@solidjs/router";
 import { basename, extname } from "node:path";
 import { readFile } from "node:fs/promises";

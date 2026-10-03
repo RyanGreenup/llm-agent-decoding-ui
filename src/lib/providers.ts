@@ -1,5 +1,3 @@
-"use server";
-
 import { query } from "@solidjs/router";
 
 export interface Provider {

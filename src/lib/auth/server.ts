@@ -1,4 +1,4 @@
-import { useSession } from "vinxi/http";
+import { useSession } from "@solidjs/start/http";
 import { findUserByUsername, getUserPasswordHash } from "./db";
 import { verifyPassword } from "./hash";
 import { getSessionSecret } from "../secrets";

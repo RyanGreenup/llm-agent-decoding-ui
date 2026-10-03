@@ -11,7 +11,7 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
-    "types": ["vinxi/types/client", "bun-types"],
+    "types": ["@solidjs/start/env", "bun-types"],
     "isolatedModules": true,
     "paths": {
       "~/*": ["./src/*"]

@@ -1,6 +1,7 @@
 "use server";
 
 import { logger } from "../lib/logger";
+import { definePlugin } from "nitro";
 
 function describe(reason: unknown) {
   return {
@@ -9,9 +10,7 @@ function describe(reason: unknown) {
   };
 }
 
-export default function registerProcessErrorLogging() {
-  "use server";
-
+export default definePlugin(() => {
   process.on("unhandledRejection", (reason) => {
     logger.error("Unhandled promise rejection", describe(reason));
     process.exit(1);
@@ -21,4 +20,4 @@ export default function registerProcessErrorLogging() {
     logger.error("Uncaught exception", describe(reason));
     process.exit(1);
   });
-}
+});

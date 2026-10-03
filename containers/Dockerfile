@@ -12,7 +12,6 @@ FROM oven/bun:1 AS deps
 WORKDIR /app
 
 COPY package.json bun.lock* bun.lockb* ./
-COPY patches ./patches
 RUN bun install --frozen-lockfile --production && rm -rf /tmp/*
 
 # -----------------------------------------------------------------------------
@@ -24,11 +23,10 @@ WORKDIR /app
 
 # Install ALL dependencies (including dev) for build
 COPY package.json bun.lock* bun.lockb* ./
-COPY patches ./patches
 RUN bun install --frozen-lockfile
 
 # Copy only files required for build
-COPY app.config.ts tsconfig.json ./
+COPY vite.config.ts tsconfig.json ./
 COPY src ./src
 COPY public ./public
 COPY tests/route-auth-guard.test.ts ./tests/route-auth-guard.test.ts

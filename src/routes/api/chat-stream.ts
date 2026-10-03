@@ -19,6 +19,11 @@ type StreamEvent =
   | { type: "error"; message: string }
   | { type: "ping" };
 
+const MAX_QUESTION_CHARS = 8_000;
+const MAX_HISTORY_MESSAGES = 40;
+const MAX_HISTORY_CHARS = 60_000;
+const MAX_MODEL_CHARS = 100;
+
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
@@ -53,6 +58,17 @@ export async function POST(event: any) {
     ? payload.history.filter(isChatMessage)
     : [];
   const model = typeof payload.model === "string" ? payload.model : undefined;
+
+  if (question.length > MAX_QUESTION_CHARS) {
+    return new Response("Question too long", { status: 413 });
+  }
+  const historyChars = history.reduce((n, m) => n + m.content.length, 0);
+  if (history.length > MAX_HISTORY_MESSAGES || historyChars > MAX_HISTORY_CHARS) {
+    return new Response("History too long", { status: 413 });
+  }
+  if (model !== undefined && model.length > MAX_MODEL_CHARS) {
+    return new Response("Invalid model", { status: 400 });
+  }
   const documentPath = await getRawDocPath();
   chatLog.info("chat_stream.request", { question: question.slice(0, 120), historyCount: history.length, model: model ?? "default" });
 

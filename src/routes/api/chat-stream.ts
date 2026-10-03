@@ -4,6 +4,7 @@ import {
   type ChatMessage,
 } from "~/lib/chat/stuffed-chat";
 import type { StuffedChatTraceEvent } from "~/lib/chat/stuffed-chat-auditing";
+import { requireUser } from "~/lib/auth";
 import { chatLog } from "~/lib/logger";
 
 type ChatStreamRequest = {
@@ -30,6 +31,12 @@ function isChatMessage(value: unknown): value is ChatMessage {
 }
 
 export async function POST(event: any) {
+  try {
+    await requireUser();
+  } catch {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   let payload: ChatStreamRequest;
   try {
     payload = (await event.request.json()) as ChatStreamRequest;

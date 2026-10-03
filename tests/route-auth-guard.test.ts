@@ -84,4 +84,25 @@ describe("(app) route auth guard", () => {
       "Every admin page route must call createProtectedStaffRoute().",
     ].join("\n")).toEqual([]);
   });
+
+  it("every api route handler calls requireUser", async () => {
+    const root = join(process.cwd(), "src/routes/api");
+    const files = (await readdir(root)).filter((f) => f.endsWith(".ts"));
+    expect(files.length).toBeGreaterThan(0);
+
+    const missing: string[] = [];
+    for (const name of files) {
+      const src = await readFile(join(root, name), "utf-8");
+      const hasImport = /import\s[^;]*requireUser[^;]*from\s+["']~\/lib\/auth["']/.test(src);
+      const hasCall = src.includes("requireUser(");
+      if (!hasImport || !hasCall) missing.push(`src/routes/api/${name}`);
+    }
+
+    expect(missing, [
+      "These api routes are missing requireUser():",
+      ...missing.map((f) => `  - ${f}`),
+      "",
+      "Every api route must authenticate the caller; anonymous requests spend LLM credits.",
+    ].join("\n")).toEqual([]);
+  });
 });

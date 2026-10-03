@@ -11,4 +11,5 @@ COPY . .
 RUN bun --bun run build
 
 EXPOSE 3075
+ENV PORT=3075
 CMD ["bun", "--bun", "run", ".output/server/index.mjs"]

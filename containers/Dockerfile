@@ -70,6 +70,7 @@ COPY --chown=appuser:appgroup src/lib ./src/lib
 COPY --from=builder --chown=appuser:appgroup /app/tsconfig.json ./
 
 ENV NODE_ENV=production
+ENV PORT=3075
 
 USER appuser
 

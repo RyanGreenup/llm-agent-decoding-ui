@@ -43,6 +43,7 @@ tests
 !tests/
 tests/*
 !tests/route-auth-guard.test.ts
+!tests/ssr-stream-disconnect.test.ts
 scratch.ts
 docker-compose.yml
 docker-compose.production.yml

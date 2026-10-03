@@ -27,3 +27,7 @@ gitignore
 .DS_Store
 Thumbs.db
 data
+.agents
+.codegraph
+.codemap
+.serena

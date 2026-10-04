@@ -9,7 +9,7 @@
     "check:auth": "vitest run tests/route-auth-guard.test.ts"
   },
   "dependencies": {
-    "@chonkiejs/core": "^0.0.11",
+    "@chonkiejs/core": "^0.0.12",
     "@inquirer/prompts": "^8.7.2",
     "@lancedb/lancedb": "^0.39.0",
     "@solidjs/router": "^1.0.0",

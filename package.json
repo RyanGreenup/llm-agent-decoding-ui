@@ -13,7 +13,7 @@
     "@inquirer/prompts": "^8.7.2",
     "@lancedb/lancedb": "^0.39.0",
     "@solidjs/router": "^1.0.0",
-    "@solidjs/start": "2.0.5",
+    "@solidjs/start": "2.0.6",
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcrypt": "^6.0.0",
     "@types/katex": "^0.16.8",

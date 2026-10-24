@@ -5,7 +5,7 @@
     "": {
       "name": "example-with-tailwindcss",
       "dependencies": {
-        "@chonkiejs/core": "^0.0.11",
+        "@chonkiejs/core": "^0.0.12",
         "@inquirer/prompts": "^8.7.2",
         "@lancedb/lancedb": "^0.39.0",
         "@solidjs/router": "^1.0.0",
@@ -98,7 +98,7 @@
 
     "@chonkiejs/chunk": ["@chonkiejs/chunk@0.9.3", "", {}, "sha512-uUOeoFGY3s6kzAoKskI50weZN0zvW3oLwUijA1uX7Wxuy9yZStF2IvGuXRigMgP2g/L85lsotYGkjpBMLjQnrg=="],
 
-    "@chonkiejs/core": ["@chonkiejs/core@0.0.11", "", { "dependencies": { "@chonkiejs/chunk": "^0.9.3" }, "optionalDependencies": { "@kreuzberg/tree-sitter-language-pack": "^1.8.0" } }, "sha512-l83NIkeBAqMd4ducIX5j2m1fbADtGs13yEzQ7M2reFaN56T7yccxrXG3E52OdR48h+vAvwbfOeLbzhsOVGpW/w=="],
+    "@chonkiejs/core": ["@chonkiejs/core@0.0.12", "", { "dependencies": { "@chonkiejs/chunk": "^0.9.3" }, "optionalDependencies": { "@kreuzberg/tree-sitter-language-pack": "^1.8.0" } }, "sha512-pKGlkY9CWhuamJdjvAemfHueA5T7TE9uGkvPMcIkPyeskQaZOlaguvHxya0whuLSDVWKvdFrd7eSuAkLLnA5yA=="],
 
     "@codemirror/autocomplete": ["@codemirror/autocomplete@6.20.0", "", { "dependencies": { "@codemirror/language": "^6.0.0", "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.17.0", "@lezer/common": "^1.0.0" } }, "sha512-bOwvTOIJcG5FVo5gUUupiwYh8MioPLQ4UcqbcRf7UQ98X90tCa9E1kZ3Z7tqwpZxYyOvh1YTYbmZE9RTfTp5hg=="],
 

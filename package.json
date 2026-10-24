@@ -17,7 +17,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcrypt": "^6.0.0",
     "@types/katex": "^0.16.8",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "bcrypt": "^6.0.0",
     "consola": "^3.4.2",
     "daisyui": "^5.7.47",
